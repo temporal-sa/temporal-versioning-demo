@@ -7,6 +7,14 @@ linters:
     - bodyclose
     - errorlint
     - gocritic
+  settings:
+    revive:
+      rules:
+        # PizzaOrderV1/V2/V3 deliberately echo the "PizzaOrder" workflow type
+        # name they register under, so the package-qualified stutter is intended.
+        - name: exported
+          arguments:
+            - disableStutteringCheck
 formatters:
   enable:
     - gofumpt
