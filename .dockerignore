@@ -1,0 +1,12 @@
+.git
+.env
+*.md
+bin/
+tmp/
+dist/
+*.test
+*.out
+.air.toml
+.github/
+.superpowers/
+docs/

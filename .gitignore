@@ -1,0 +1,14 @@
+# Build output
+/bin/
+/tmp/
+*.test
+*.out
+
+# Local environment
+.env
+
+# Brainstorming artifacts (local design mockups)
+.superpowers/
+
+# Design spec — kept local, not committed
+docs/superpowers/

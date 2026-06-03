@@ -1,0 +1,16 @@
+# Kustomize entry point for the Pizza Tracker demo.
+# Apply against the running temporal-k8s Kind cluster:
+#
+#   kubectl apply -k k8s/
+#
+# Container images are published to ghcr.io/alexandreroman/<image>.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+# TODO: add the demo resources as they are implemented:
+#   - temporalworkerdeployment.yaml  # versioned pizza worker (Manual strategy)
+#   - backend.yaml                   # backend Deployment + Service
+#   - httproute.yaml                 # Traefik route (pizza.127-0-0-1.nip.io)
+resources: []
