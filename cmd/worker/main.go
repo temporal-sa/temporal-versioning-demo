@@ -3,49 +3,95 @@
 // The worker is registered with Temporal as part of a Worker Deployment so the
 // Temporal Worker Controller can manage its version and route traffic to it.
 // The deployment name and build ID are injected by the controller through
-// environment variables.
-//
-// TODO: connect to Temporal, register the pizza workflow and activities with
-// the Pinned versioning behavior, and run a versioned worker. See
-// docs/superpowers/specs for the full design.
+// environment variables. The PIZZA_VERSION env var selects which workflow shape
+// (v1/v2/v3) this pod registers under the shared "PizzaOrder" type; all shapes
+// are Pinned so in-flight orders never switch versions mid-flight.
 package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if err := run(logger); err != nil {
+		logger.Error("pizza worker failed", "err", err)
+		os.Exit(1)
+	}
+}
 
+// run wires and runs the versioned worker until the process is signalled. It owns
+// all deferred cleanup so main can exit non-zero without skipping it.
+func run(logger *slog.Logger) error {
 	cfg := struct {
 		temporalAddress string
+		namespace       string
 		deploymentName  string
 		buildID         string
 		taskQueue       string
+		version         string
 	}{
 		temporalAddress: getenv("TEMPORAL_ADDRESS", "localhost:7233"),
+		namespace:       getenv("TEMPORAL_NAMESPACE", "default"),
 		deploymentName:  os.Getenv("TEMPORAL_DEPLOYMENT_NAME"),
 		buildID:         os.Getenv("TEMPORAL_WORKER_BUILD_ID"),
-		taskQueue:       getenv("PIZZA_TASK_QUEUE", "pizza"),
+		taskQueue:       getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue),
+		version:         getenv("PIZZA_VERSION", string(pizza.V1)),
+	}
+
+	v, ok := pizza.ParseVersion(cfg.version)
+	if !ok {
+		return fmt.Errorf("invalid PIZZA_VERSION %q", cfg.version)
+	}
+	if cfg.deploymentName == "" || cfg.buildID == "" {
+		return fmt.Errorf("missing controller-injected env vars: TEMPORAL_DEPLOYMENT_NAME=%q TEMPORAL_WORKER_BUILD_ID=%q",
+			cfg.deploymentName, cfg.buildID)
 	}
 
 	logger.Info("starting pizza worker",
-		"temporalAddress", cfg.temporalAddress,
-		"deploymentName", cfg.deploymentName,
-		"buildID", cfg.buildID,
-		"taskQueue", cfg.taskQueue,
-	)
+		"temporalAddress", cfg.temporalAddress, "namespace", cfg.namespace,
+		"deploymentName", cfg.deploymentName, "buildID", cfg.buildID,
+		"taskQueue", cfg.taskQueue, "pizzaVersion", cfg.version)
+
+	c, err := client.Dial(client.Options{HostPort: cfg.temporalAddress, Namespace: cfg.namespace})
+	if err != nil {
+		return fmt.Errorf("connect to Temporal: %w", err)
+	}
+	defer c.Close()
+
+	w := worker.New(c, cfg.taskQueue, worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			UseVersioning: true,
+			Version: worker.WorkerDeploymentVersion{
+				DeploymentName: cfg.deploymentName,
+				BuildID:        cfg.buildID,
+			},
+			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
+		},
+	})
+	pizza.Register(w, v)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// TODO: run the versioned Temporal worker until the context is cancelled.
+	if err := w.Start(); err != nil {
+		return fmt.Errorf("start worker: %w", err)
+	}
+	defer w.Stop()
+
 	<-ctx.Done()
 	logger.Info("pizza worker stopped")
+	return nil
 }
 
 func getenv(key, fallback string) string {
