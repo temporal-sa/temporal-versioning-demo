@@ -56,6 +56,8 @@ dev: infra-up dev-stop ## Start Temporal + backend + worker v1; open http://loca
 dev-stop: ## Kill orphaned host dev processes (Air, backend, worker)
 	@pkill -f 'air -c .air.toml' || true
 	@pkill -f '$(CURDIR)/tmp/backend' || true
+	@pkill -f 'air -c .air.worker.toml' || true
+	@pkill -f '$(CURDIR)/tmp/worker/worker' || true
 	@pkill -f 'go run ./cmd/worker' || true
 	@pkill -f 'exe/worker' || true
 	@# Force-free the dev ports: a backend mid graceful-shutdown (SSE keeps
@@ -75,8 +77,8 @@ backend: ## Run the backend with hot reload via Air (dashboard :8090 live-reload
 		air -c .air.toml
 
 .PHONY: worker
-worker: ## Run the v1 worker on the host
-	$(WORKER_ENV) PIZZA_VERSION=v1 TEMPORAL_WORKER_BUILD_ID=v1-local go run ./cmd/worker
+worker: ## Run the v1 worker on the host with hot reload via Air
+	$(WORKER_ENV) PIZZA_VERSION=v1 TEMPORAL_WORKER_BUILD_ID=v1-local air -c .air.worker.toml
 
 .PHONY: worker-v2
 worker-v2: ## Run the v2 worker on the host (demo: ship v2)

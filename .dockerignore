@@ -7,6 +7,7 @@ dist/
 *.test
 *.out
 .air.toml
+.air.worker.toml
 .github/
 .superpowers/
 docs/

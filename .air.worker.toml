@@ -1,0 +1,20 @@
+root = "."
+tmp_dir = "tmp/worker"
+
+[build]
+  # Build only the worker; its tmp_dir is separate from the backend's so the two
+  # Air instances (started together by `make dev`) don't clobber each other.
+  cmd = "go build -o ./tmp/worker/worker ./cmd/worker"
+  bin = "./tmp/worker/worker"
+  include_ext = ["go"]
+  # The worker depends only on cmd/worker and internal/pizza; ignore backend/dashboard
+  # edits so they don't trigger a needless worker rebuild + restart.
+  include_dir = ["cmd/worker", "internal/pizza"]
+  delay = 200
+  # Give the worker a moment to stop gracefully (worker.Stop drains in-flight tasks)
+  # on each reload before Air force-kills it.
+  kill_delay = "2s"
+  send_interrupt = true
+
+[log]
+  main_only = false

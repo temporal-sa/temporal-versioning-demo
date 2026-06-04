@@ -10,4 +10,4 @@
 - [Architecture decisions](references/architecture-decisions.md) — single image + PIZZA_VERSION; deployment name `pizza` (no `.`); no `ORDER BY`; rollback/recover; worker-versioning rules (moved from CLAUDE.md); backend auto-promotes first version (no flag, everywhere); timing.
 - [Frontend stack: Tailwind Play CDN + HTMX](references/frontend-stack-tailwind-htmx.md) — no build; styles only in index.html; server-rendered HTML over SSE; SPA embedded in binary.
 - [Workflow waits are activity-side](references/workflow-waits-activity-side.md) — no workflow.Sleep/timers; dwell simulated in activities (injectable, zero in tests); Done set before final activity.
-- [make dev hot-reloads backend only](references/make-dev-worker-no-hot-reload.md) — worker runs via `go run`, no reload; restart it to pick up internal/pizza changes.
+- [make dev hot-reloads both backend and worker](references/make-dev-worker-no-hot-reload.md) — backend + v1 worker under Air (.air.worker.toml, own tmp_dir); worker-v2/v3 still go run.
