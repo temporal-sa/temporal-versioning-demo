@@ -129,13 +129,13 @@
 
       /* ===== KPI strip ===== */
       .kpis {
-        @apply flex shrink-0 gap-px;
+        @apply grid grid-cols-3 shrink-0 gap-px;
         background: #23232c;
         border-bottom: 1px solid #23232c;
       }
 
       .kpi {
-        @apply flex-1 px-4 py-[11px];
+        @apply px-[18px] py-[11px];
         background: #0e0e13;
       }
 
@@ -152,14 +152,18 @@
         @apply text-[11px] opacity-60;
       }
 
-      /* ===== Body: two columns on desktop ===== */
+      /* ===== Body: shared 3-column grid (orders span 2 tracks, deployment 1) =====
+         Uses the same grid-cols-3 tracks as the KPI strip, so the 2/3 boundary is
+         pixel-identical. The 1px gap-px gaps over the #23232c background draw the
+         divider line, continuous with and aligned to the KPI strip's divider. */
       .dbody {
-        @apply flex min-h-0 flex-1 max-[760px]:flex-col;
+        @apply grid grid-cols-3 min-h-0 flex-1 gap-px max-[760px]:grid-cols-1;
+        background: #23232c;
       }
 
       .dleft {
-        @apply flex flex-1 min-w-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:flex-none max-[760px]:overflow-visible max-[760px]:border-r-0;
-        border-right: 1px solid #23232c;
+        @apply col-span-2 flex min-w-0 min-h-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:col-span-1 max-[760px]:overflow-visible;
+        background: #0e0e13;
         /* Always reserve the scrollbar gutter so the masonry columns don't shift
            left when the scrollbar toggles as orders are added/removed. Inert on
            mobile, where .dleft is overflow-visible (no internal scroll region). */
@@ -167,10 +171,11 @@
       }
 
       .dright {
-        /* Pinned to exactly one third so its left edge aligns with the 3rd KPI
-           cell ("Ramping"); the mobile max-[760px]:flex-none below resets this
-           when the layout stacks into a single column. */
-        @apply min-w-0 basis-1/3 grow-0 shrink-0 overflow-y-auto px-[18px] py-4 max-[760px]:flex-none max-[760px]:overflow-visible;
+        /* Occupies the 3rd grid track (auto-placed after .dleft's 2-track span).
+           Because .dbody shares the KPI strip's grid-cols-3 tracks, this column's
+           left edge aligns with the "Ramping" KPI cell by construction. */
+        @apply min-w-0 min-h-0 overflow-y-auto px-[18px] py-4 max-[760px]:overflow-visible;
+        background: #0e0e13;
         /* Always reserve the scrollbar gutter so the column doesn't shift when
            the scrollbar toggles. */
         scrollbar-gutter: stable;
