@@ -1,11 +1,9 @@
 // Command backend serves the Pizza Tracker SPA and its API.
 //
 // It polls Temporal for the worker-deployment routing state and the live
-// orders, streams updates to the browser over SSE, and translates rollout
-// actions (ramp, promote, rollback, recover) into Temporal API calls.
-//
-// TODO: wire the Temporal client, the SSE state poller and the action
-// handlers. See docs/superpowers/specs for the full design.
+// orders, streams updates to the browser over SSE, generates a steady stream of
+// orders, and translates rollout actions (ramp, promote, rollback, recover)
+// into Temporal API calls.
 package main
 
 import (
@@ -17,30 +15,47 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/alexandreroman/temporal-versioning-demo/internal/dashboard"
+	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
+	"go.temporal.io/sdk/client"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	addr := "0.0.0.0:" + getenv("PORT", "8080")
+	temporalAddress := getenv("TEMPORAL_ADDRESS", "localhost:7233")
+	namespace := getenv("TEMPORAL_NAMESPACE", "default")
+	deploymentName := getenv("PIZZA_DEPLOYMENT_NAME", "default.pizza")
+	taskQueue := getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue)
+	frontendDir := getenv("FRONTEND_DIR", "frontend")
+	pollInterval := durEnv("PIZZA_POLL_INTERVAL", time.Second, logger)
+	orderInterval := durEnv("PIZZA_ORDER_INTERVAL", 6*time.Second, logger)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	// TODO: GET /api/state, GET /events (SSE), POST /api/{ramp,promote,rollback,recover}.
-	mux.Handle("/", http.FileServer(http.Dir(getenv("FRONTEND_DIR", "frontend"))))
+	c, err := client.Dial(client.Options{HostPort: temporalAddress, Namespace: namespace})
+	if err != nil {
+		logger.Error("failed to connect to Temporal", "err", err)
+		os.Exit(1)
+	}
+	defer c.Close()
 
+	hub := dashboard.NewHub()
+	reader := dashboard.NewSDKReader(c, deploymentName, logger)
+	poller := dashboard.NewPoller(reader, deploymentName, pollInterval, logger, hub.Publish)
+	actions := dashboard.NewActions(c, deploymentName, namespace, logger)
+	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, 0, logger)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           dashboard.NewServer(hub, actions, frontendDir, logger).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	go poller.Run(ctx)
+	go gen.Run(ctx)
 	go func() {
 		logger.Info("backend listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -64,4 +79,17 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func durEnv(key string, fallback time.Duration, logger *slog.Logger) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		logger.Warn("invalid duration env, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	return d
 }
