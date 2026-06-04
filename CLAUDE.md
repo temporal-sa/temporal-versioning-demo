@@ -17,16 +17,17 @@ architecture.
 - **Frontend** — single-page Pizza Tracker dashboard
 - **Kustomize** — K8s manifests under `k8s/`
 - **Docker** — images published to ghcr.io
-- **Task** — task runner (`Taskfile.yml`)
+- **Make** — task runner (`Makefile`)
 
 ## Build & run
 
 ```sh
-task build         # build worker + backend binaries
-task run-backend   # run the backend locally
-task run-worker    # run the worker locally
-task test          # run tests
-kubectl apply -k k8s/   # deploy to the temporal-k8s Kind cluster
+make build       # build worker + backend binaries
+make dev         # Temporal (Docker) + backend + worker v1 on the host
+make backend     # run only the backend locally (hot reload)
+make worker      # run only the worker v1 locally
+make test        # run tests
+make deploy      # deploy to the temporal-k8s Kind cluster
 ```
 
 ## Modules

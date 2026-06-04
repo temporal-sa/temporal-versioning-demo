@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/alexandreroman/pizza-backend:latest
+          image: ghcr.io/alexandreroman/temporal-versioning-demo-backend:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

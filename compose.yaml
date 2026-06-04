@@ -1,0 +1,117 @@
+# Local-only dev stack for the Temporal Worker Versioning demo.
+#
+# Self-contained: a Temporal dev server, the Pizza Tracker backend and a
+# versioned pizza worker. No secrets, no external dependencies.
+#
+# `make app-up` starts temporal + backend + worker (v1). The v2 and v3
+# workers sit behind Compose profiles and are started on demand, e.g.:
+#
+#     docker compose --profile v2 up -d
+#     docker compose --profile v3 up -d
+#
+# The backend and worker images are distroless/static (no shell, no wget),
+# so only the Temporal service declares a healthcheck.
+
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    command:
+      - server
+      - start-dev
+      - --ip
+      - 0.0.0.0
+    ports:
+      - "7233:7233" # workers & clients gRPC
+      - "8233:8233" # Web UI http://localhost:8233
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      PIZZA_DEPLOYMENT_NAME: default.pizza
+      PIZZA_TASK_QUEUE: pizza
+    ports:
+      - "8080:8080" # Pizza Tracker http://localhost:8080
+    depends_on:
+      temporal:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_WORKER_BUILD_ID: v1-local
+      PIZZA_VERSION: v1
+      PIZZA_TASK_QUEUE: pizza
+    depends_on:
+      temporal:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  worker-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    profiles: ["v2"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_WORKER_BUILD_ID: v2-local
+      PIZZA_VERSION: v2
+      PIZZA_TASK_QUEUE: pizza
+    depends_on:
+      temporal:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  worker-v3:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    profiles: ["v3"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_WORKER_BUILD_ID: v3-local
+      PIZZA_VERSION: v3
+      PIZZA_TASK_QUEUE: pizza
+    depends_on:
+      temporal:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped

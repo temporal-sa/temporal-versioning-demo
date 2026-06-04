@@ -117,9 +117,10 @@ build.
   Kind cluster (Temporal Server + Temporal Worker
   Controller).
 - [Go](https://go.dev/) 1.26+
-- [Task](https://taskfile.dev/)
+- [GNU Make](https://www.gnu.org/software/make/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) and
-  [Docker](https://www.docker.com/)
+  [Docker](https://www.docker.com/). The local stack uses
+  Docker Compose v2 (`docker compose`).
 
 ## Build & run
 
@@ -127,32 +128,68 @@ build.
 git clone https://github.com/alexandreroman/temporal-versioning-demo.git
 cd temporal-versioning-demo
 
-task build   # build the worker and backend binaries
-task test    # run the tests (go test -race -shuffle=on ./...)
-task lint    # run golangci-lint (requires golangci-lint v2)
+make build   # build the worker and backend binaries
+make test    # run the tests (go test -race -shuffle=on ./...)
+make lint    # run golangci-lint (requires golangci-lint v2)
 ```
 
-Run the components locally against a reachable Temporal
-frontend (for example the one exposed by `temporal-k8s`). The
-worker also needs `PIZZA_VERSION` and the controller-injected
-deployment vars, which are absent when running outside the
-cluster — set them by hand:
+Run `make help` to list every target grouped by section.
+
+### Run locally without Kubernetes
+
+You can run the whole demo on your machine without a cluster.
+Both flows below start a Temporal dev server in Docker via
+Compose, so no `temporal-k8s` cluster is required.
+
+In both cases the Worker Controller and its **Manual**
+strategy are not in play locally, so **no Current version is
+set initially and no orders flow** until you promote v1.
+Click **Promote** in the UI, or run the
+`temporal worker deployment set-current-version` CLI shown in
+[Deploy to the temporal-k8s cluster](#deploy-to-the-temporal-k8s-cluster).
+
+**Host hot-reload flow** — runs the backend and worker on the
+host with hot reload, ideal for iterating on code:
 
 ```bash
-TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233 \
-  PIZZA_VERSION=v1 \
-  TEMPORAL_DEPLOYMENT_NAME=default.pizza \
-  TEMPORAL_WORKER_BUILD_ID=local \
-  task run-worker
+make dev   # starts Temporal in Docker, then backend + worker v1 on the host
+```
 
-TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233 \
-  task run-backend   # serves the Pizza Tracker on http://localhost:8080
+During the demo, ship the next versions by running extra
+workers in separate terminals:
+
+```bash
+make worker-v2   # ship v2
+make worker-v3   # ship v3
+```
+
+The Temporal Web UI is at <http://localhost:8233> and the
+Pizza Tracker dashboard at <http://localhost:8080>.
+
+**Full Docker flow** — builds and runs every component in
+containers:
+
+```bash
+make app-up   # builds and starts Temporal + backend + worker v1
+```
+
+During the demo, ship the next versions via Compose profiles:
+
+```bash
+docker compose --profile v2 up -d   # ship v2
+docker compose --profile v3 up -d   # ship v3
+```
+
+Tear the stack down with:
+
+```bash
+make app-down
 ```
 
 Container images are published to ghcr.io by CI:
 
-- `ghcr.io/alexandreroman/pizza-worker`
-- `ghcr.io/alexandreroman/pizza-backend`
+- `ghcr.io/alexandreroman/temporal-versioning-demo-worker`
+- `ghcr.io/alexandreroman/temporal-versioning-demo-backend`
 
 ## Deploy to the temporal-k8s cluster
 
@@ -162,6 +199,11 @@ Apply the Kustomize manifests against the running cluster
 ```bash
 kubectl apply -k k8s/
 ```
+
+For convenience, `make deploy` runs `kubectl apply -k k8s/`
+and `make teardown` runs `kubectl delete -k k8s/`. Unlike the
+local-dev targets, these ignore `.env.local` and run against
+the host environment unchanged.
 
 Because the Worker Controller runs in **Manual** strategy, the
 first version starts **Inactive** with no Current version, so
@@ -231,14 +273,14 @@ fields are the same.
 
 The worker reads:
 
-| Variable                   | Description                            | Default          |
-| -------------------------- | -------------------------------------- | ---------------- |
-| `TEMPORAL_ADDRESS`         | Temporal frontend gRPC address         | `localhost:7233` |
-| `TEMPORAL_NAMESPACE`       | Temporal namespace                     | `default`        |
-| `TEMPORAL_DEPLOYMENT_NAME` | Worker Deployment name (controller)    | (required)       |
-| `TEMPORAL_WORKER_BUILD_ID` | Worker Build ID (controller)           | (required)       |
-| `PIZZA_VERSION`            | Workflow shape this pod runs (v1/v2/v3) | `v1`            |
-| `PIZZA_TASK_QUEUE`         | Task queue polled by the worker        | `pizza`          |
+| Variable                   | Description                             | Default          |
+| -------------------------- | --------------------------------------- | ---------------- |
+| `TEMPORAL_ADDRESS`         | Temporal frontend gRPC address          | `localhost:7233` |
+| `TEMPORAL_NAMESPACE`       | Temporal namespace                      | `default`        |
+| `TEMPORAL_DEPLOYMENT_NAME` | Worker Deployment name (controller)     | (required)       |
+| `TEMPORAL_WORKER_BUILD_ID` | Worker Build ID (controller)            | (required)       |
+| `PIZZA_VERSION`            | Workflow shape this pod runs (v1/v2/v3) | `v1`             |
+| `PIZZA_TASK_QUEUE`         | Task queue polled by the worker         | `pizza`          |
 
 The backend reads:
 
@@ -247,7 +289,7 @@ The backend reads:
 | `TEMPORAL_ADDRESS`      | Temporal frontend gRPC address       | `localhost:7233` |
 | `TEMPORAL_NAMESPACE`    | Temporal namespace                   | `default`        |
 | `PIZZA_DEPLOYMENT_NAME` | Worker Deployment name to describe   | `default.pizza`  |
-| `PIZZA_TASK_QUEUE`      | Task queue orders are started on      | `pizza`          |
+| `PIZZA_TASK_QUEUE`      | Task queue orders are started on     | `pizza`          |
 | `PIZZA_POLL_INTERVAL`   | Temporal poll cadence                | `1s`             |
 | `PIZZA_ORDER_INTERVAL`  | New-order cadence                    | `6s`             |
 | `PORT`                  | HTTP listen port                     | `8080`           |

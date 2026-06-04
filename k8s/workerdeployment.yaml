@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/alexandreroman/pizza-worker:latest
+          image: ghcr.io/alexandreroman/temporal-versioning-demo-worker:latest
           imagePullPolicy: IfNotPresent
           env:
             # The version shape this pod runs. Bump to v2/v3 to ship a new version.

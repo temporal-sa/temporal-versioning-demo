@@ -6,6 +6,7 @@
 
 # Local environment
 .env
+.env.local
 
 # Brainstorming artifacts (local design mockups)
 .superpowers/

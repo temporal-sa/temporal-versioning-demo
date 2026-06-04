@@ -31,9 +31,9 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: pizza-worker
+          - name: temporal-versioning-demo-worker
             dockerfile: Dockerfile.worker
-          - name: pizza-backend
+          - name: temporal-versioning-demo-backend
             dockerfile: Dockerfile.backend
     steps:
       - uses: actions/checkout@v4
