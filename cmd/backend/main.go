@@ -67,6 +67,7 @@ func main() {
 
 	go poller.Run(ctx)
 	go gen.Run(ctx)
+	go actions.EnsureCurrentVersion(ctx, pollInterval)
 	go func() {
 		logger.Info("backend listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -100,6 +101,11 @@ func durEnv(key string, fallback time.Duration, logger *slog.Logger) time.Durati
 	d, err := time.ParseDuration(v)
 	if err != nil {
 		logger.Warn("invalid duration env, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	if d <= 0 {
+		// A non-positive interval would panic time.NewTicker; treat it as invalid.
+		logger.Warn("non-positive duration env, using default", "key", key, "value", v, "default", fallback)
 		return fallback
 	}
 	return d

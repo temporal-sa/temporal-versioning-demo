@@ -1,6 +1,6 @@
 ---
 name: "Pizza demo: versioning approach and Temporal wiring"
-description: "Single image + PIZZA_VERSION env selects shape; connection/deployment names; rollback & recover semantics; timing"
+description: "Single image + PIZZA_VERSION env selects shape; connection/deployment names; rollback & recover semantics; backend auto-promotes first version; timing"
 type: project
 ---
 
@@ -51,6 +51,27 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   a new version, before its (single-replica) poller has registered, and the
   default `false` would reject the call with `FailedPrecondition` and break the
   demo. Recover pages through all open orders up to a 200 cap (oldest-first).
+- **Worker versioning rules (canonical home — moved out of `CLAUDE.md`
+  2026-06-04):** workflows are **Pinned**; the controller runs in **Manual**
+  strategy; shipping new code = K8s image change (`PIZZA_VERSION` + image tag);
+  routing (ramp / promote / rollback) of versions *after the first* is
+  UI-driven via the Temporal API. Target cluster: the local `temporal-k8s` Kind
+  cluster (Temporal Server + Worker Controller already deployed).
+- **Backend auto-promotes the FIRST version (decision 2026-06-04, overrides the
+  prior "manual first promote" rule).** On startup the backend runs
+  `Actions.EnsureCurrentVersion`: if the deployment has **no Current version**,
+  it promotes the newest registered version (v1 on first boot) via
+  `SetCurrentVersion{AllowNoPollers, IgnoreMissingTaskQueues}`, polling at
+  `PIZZA_POLL_INTERVAL` until a version registers, bounded by a ~2 min timeout
+  (then it gives up with a warning; manual promote still works). It applies
+  **everywhere (local + K8s), with no env flag**, and fires **only when Current
+  is nil** — so it runs once at bootstrap and leaves the v2/v3
+  ship → ramp → promote → rollback flow fully manual/UI-driven. **This
+  supersedes** the earlier behaviour where "the first version starts Inactive
+  with no Current version until manually promoted" (old `README` K8s section /
+  `CLAUDE.md` convention); confirmed by the user on 2026-06-04. Rationale:
+  orders should flow immediately after deploy without a manual first promote —
+  the instructive part of the demo is the v2/v3 rollout, not bootstrapping v1.
 - **Friendly version labels** in the deployment panel come from CreateTime
   ordering of the Describe version summaries (oldest = v1).
 - **Timing:** 15 s dwell between steps (full order ~60-90 s); order generator

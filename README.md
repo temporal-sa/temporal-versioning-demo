@@ -146,11 +146,12 @@ Both flows below start a Temporal dev server in Docker via
 Compose, so no `temporal-k8s` cluster is required.
 
 In both cases the Worker Controller and its **Manual**
-strategy are not in play locally, so **no Current version is
-set initially and no orders flow** until you promote v1.
-Click **Promote** in the UI, or run the
-`temporal worker deployment set-current-version` CLI shown in
-[Deploy to the temporal-k8s cluster](#deploy-to-the-temporal-k8s-cluster).
+strategy are not in play locally. The backend handles the
+bootstrap instead: on startup it **auto-promotes the first
+registered version to Current** (only when none is set yet),
+so orders start flowing on v1 without any manual step.
+Shipping and routing the later versions (v2 / v3) stays
+manual — see the [Demo script](#demo-script).
 
 **Host hot-reload flow** — runs the backend and worker on the
 host with hot reload, ideal for iterating on code:
@@ -214,10 +215,17 @@ and `make teardown` runs `kubectl delete -k k8s/`. Unlike the
 local-dev targets, these ignore `.env.local` and run against
 the host environment unchanged.
 
-Because the Worker Controller runs in **Manual** strategy, the
-first version starts **Inactive** with no Current version, so
-no orders flow yet. Promote v1 to Current to start the order
-flow — click **Promote** in the UI, or use the CLI:
+The Worker Controller runs in **Manual** strategy, so it never
+sets a Current version on its own. The backend bootstraps the
+first version instead: on startup it **auto-promotes the first
+registered version to Current** (only when none is set yet),
+so orders start flowing on v1 as soon as the worker registers
+— no manual promote needed for the first version. Routing the
+later versions (ramp / promote / rollback of v2 / v3) stays
+manual, driven from the UI.
+
+If you ever need to set the Current version by hand (e.g. to
+recover), use the **Promote** button in the UI or the CLI:
 
 ```bash
 # Get the build id, then promote it:

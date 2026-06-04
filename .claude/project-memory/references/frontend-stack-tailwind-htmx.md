@@ -41,4 +41,4 @@ and was resolved in favor of keeping the CDN.
 not an external file); render new UI in the Go templates; if a future need
 demands an external `.css` file, that requires switching to a Tailwind build
 step — surface that trade-off before doing it. See
-[[pizza-demo-architecture-decisions]].
+[[architecture-decisions]].

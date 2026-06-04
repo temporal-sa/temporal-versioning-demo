@@ -7,5 +7,5 @@
 > confirmed.
 
 - [Worker Controller CRD rename](references/crd-worker-controller-rename.md) — cluster chart 0.26.0 → use WorkerDeployment/Connection, not Temporal* kinds.
-- [Pizza demo architecture decisions](references/pizza-demo-architecture-decisions.md) — single image + PIZZA_VERSION; deployment name is `pizza` (NOT `default.pizza` — no `.` allowed); no `ORDER BY` in visibility queries; rollback/recover; timing.
+- [Architecture decisions](references/architecture-decisions.md) — single image + PIZZA_VERSION; deployment name `pizza` (no `.`); no `ORDER BY`; rollback/recover; worker-versioning rules (moved from CLAUDE.md); backend auto-promotes first version (no flag, everywhere); timing.
 - [Frontend stack: Tailwind Play CDN + HTMX](references/frontend-stack-tailwind-htmx.md) — no build; styles only in index.html; server-rendered HTML over SSE; SPA embedded in binary.

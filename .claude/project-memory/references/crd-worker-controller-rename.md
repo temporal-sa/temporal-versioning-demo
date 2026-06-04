@@ -26,4 +26,4 @@ reconcile.
 **How to apply:** Author `k8s/workerdeployment.yaml` and `k8s/connection.yaml`
 with the new kinds. Before applying, verify with `kubectl get crd | grep -i
 temporal`; if only the legacy `temporalworkerdeployments` CRD exists, fall back
-to the old kinds (same fields). See [[pizza-demo-architecture-decisions]].
+to the old kinds (same fields). See [[architecture-decisions]].

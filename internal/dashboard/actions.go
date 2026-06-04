@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -30,6 +31,10 @@ const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running
 // maxRecoverPerCall caps how many stuck orders one recover call resets, so a huge
 // backlog cannot turn into an unbounded burst of reset RPCs. Truncation is logged.
 const maxRecoverPerCall = 200
+
+// bootstrapTimeout bounds the EnsureCurrentVersion startup loop: if no version is
+// registered within this window we give up and leave promotion to the operator.
+const bootstrapTimeout = 2 * time.Minute
 
 // Actions turns operator intents into Temporal API calls.
 type Actions struct {
@@ -81,6 +86,103 @@ func (a *Actions) Promote(ctx context.Context) error {
 		IgnoreMissingTaskQueues: true,
 	}); err != nil {
 		return fmt.Errorf("set current version %q: %w", target, err)
+	}
+	return nil
+}
+
+// bootstrapDecision is the outcome of evaluating whether to auto-promote a first
+// Current version at startup.
+type bootstrapDecision int
+
+const (
+	// bootstrapSkip means a Current version is already set; never re-promote.
+	bootstrapSkip bootstrapDecision = iota
+	// bootstrapPromote means no Current version is set and a target is ready.
+	bootstrapPromote
+	// bootstrapWait means nothing is ready yet; retry later.
+	bootstrapWait
+)
+
+// decideBootstrap maps the result of targetAndCurrent to a startup action. It is
+// pure (no I/O) so the bootstrap rules can be unit-tested in isolation.
+//
+// Rules:
+//   - a Current version already exists -> skip (keeps the manual ramp/promote/
+//     rollback flow untouched, even if a newer target also exists);
+//   - no Current and a target is ready -> promote that target;
+//   - otherwise (ErrNoTargetVersion, describe error, empty target) -> wait.
+func decideBootstrap(target, current string, err error) (bootstrapDecision, string) {
+	if current != "" {
+		return bootstrapSkip, ""
+	}
+	if err == nil && target != "" {
+		return bootstrapPromote, target
+	}
+	return bootstrapWait, ""
+}
+
+// EnsureCurrentVersion makes sure the deployment has a Current version at startup
+// by promoting the newest registered version (v1 on first boot) when none is set.
+//
+// It runs everywhere (local and K8s) with no feature flag. Because it fires only
+// while Current is nil, it acts once at bootstrap and then leaves later
+// ramp/promote/rollback entirely to the operator. The loop is bounded by
+// bootstrapTimeout; on timeout it logs and returns, so the operator can still
+// promote manually. It always honors ctx cancellation.
+func (a *Actions) EnsureCurrentVersion(ctx context.Context, pollInterval time.Duration) {
+	deadline := time.NewTimer(bootstrapTimeout)
+	defer deadline.Stop()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		target, current, err := a.targetAndCurrent(ctx)
+		switch decision, buildID := decideBootstrap(target, current, err); decision {
+		case bootstrapSkip:
+			a.logger.Info("current version already set, skipping bootstrap", "currentBuild", current)
+			return
+		case bootstrapPromote:
+			if err := a.promoteBootstrap(ctx, buildID); err != nil {
+				// Treat as transient: keep retrying until the deadline.
+				a.logger.Warn("bootstrap promote failed, will retry", "build", buildID, "err", err)
+				break
+			}
+			a.logger.Info("bootstrapped current version", "build", buildID)
+			return
+		case bootstrapWait:
+			// Nothing registered yet; fall through to wait for the next tick. A
+			// non-nil err here means describe is failing (e.g. Temporal unreachable);
+			// log it so the cause is diagnosable before the deadline fires. Stay
+			// silent on the normal "no version yet" case (err nil) to avoid noise.
+			if err != nil {
+				a.logger.Debug("bootstrap waiting on describe failure, will retry", "err", err)
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline.C:
+			a.logger.Warn("no version registered in time for bootstrap; operator can still promote manually",
+				"timeout", bootstrapTimeout)
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// promoteBootstrap sets buildID as the Current version, reusing the same lenient
+// options as Promote (the freshly-shipped version's pollers may not be registered
+// yet, and its task queues may differ from any prior version).
+func (a *Actions) promoteBootstrap(ctx context.Context, buildID string) error {
+	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+	if _, err := h.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
+		BuildID:                 buildID,
+		AllowNoPollers:          true,
+		IgnoreMissingTaskQueues: true,
+	}); err != nil {
+		return fmt.Errorf("set current version %q: %w", buildID, err)
 	}
 	return nil
 }
