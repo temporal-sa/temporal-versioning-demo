@@ -88,6 +88,44 @@
             transform: translateY(0);
           }
         }
+
+        /* Done card exit: greys + settles, slides out left while shrinking/fading,
+           then collapses its height so siblings slide up. Holds the gone state
+           (forwards) until idiomorph removes the node. */
+        @keyframes order-leave {
+          0% {
+            filter: grayscale(0);
+            opacity: 1;
+            transform: translateX(0) scale(1);
+            max-height: 110px;
+          }
+          18% {
+            filter: grayscale(1);
+            opacity: 1;
+            transform: translateX(0) scale(0.97);
+            max-height: 110px;
+          }
+          60% {
+            filter: grayscale(1);
+            opacity: 0;
+            transform: translateX(-110%) scale(0.85);
+            max-height: 110px;
+          }
+          100% {
+            filter: grayscale(1);
+            opacity: 0;
+            transform: translateX(-110%) scale(0.85);
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-width: 0;
+            /* Discrete property: held until the animation ends (forwards fill), so the
+               card stays visible for the whole exit, then drops out of the grid flow at
+               100% — letting the grid close the residual row-gap immediately instead of
+               waiting for idiomorph to remove the still-Running node seconds later. */
+            display: none;
+          }
+        }
       }
 
       * {
@@ -160,6 +198,10 @@
       .dleft {
         @apply flex flex-1 min-w-0 flex-col px-[18px] py-4 max-[760px]:flex-none max-[760px]:border-r-0;
         border-right: 1px solid #23232c;
+        /* Clip the leftward slide of leaving Done cards so they don't bleed past
+           the column edge or add a horizontal scrollbar. Clipping here (not on
+           .olist) keeps card pulse-ring shadows visible inside the 18px padding. */
+        overflow-x: clip;
       }
 
       .dright {
@@ -279,12 +321,25 @@
         background: #15151d;
         border: 1px solid #20202a;
         /* Runs once per new DOM node; idiomorph preserves existing cards. */
-        animation: card-in 0.35s ease both;
+        animation: card-in 0.35s ease backwards;
+        /* Animates the Done treatment when idiomorph flips the .done class on a kept node. */
+        transition:
+          filter 0.5s ease,
+          opacity 0.5s ease,
+          transform 0.5s ease;
       }
 
       .order.fail {
         border-color: #5b1d1d;
         background: #1a1416;
+      }
+
+      /* Done: animate the card out (grey, slide left, collapse) while it lingers
+         before idiomorph removes the node. The animation overrides the inherited
+         card-in shorthand, which has long finished on a card that becomes done. */
+      .order.done {
+        overflow: hidden; /* clip own content while the height collapses */
+        animation: order-leave 1s ease forwards;
       }
 
       .oh {
@@ -419,6 +474,15 @@
       @media (prefers-reduced-motion: reduce) {
         .order {
           animation: none;
+          transition: none;
+        }
+
+        /* Keep the informational grey/dim, drop the exit motion entirely. */
+        .order.done {
+          animation: none;
+          transform: none;
+          filter: grayscale(1);
+          opacity: 0.55;
         }
 
         .stepper::after,

@@ -23,7 +23,7 @@
 {{- end -}}
 
 {{- define "order" -}}
-<div class="order{{if .Failing}} fail{{end}}" id="order-{{.ID}}">
+<div class="order{{if .Failing}} fail{{end}}{{if .Done}} done{{end}}" id="order-{{.ID}}">
   <div class="oh">
     {{- template "badge" .Version -}}
     <b>#{{.ID}}</b>

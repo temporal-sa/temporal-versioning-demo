@@ -42,6 +42,42 @@ rules when changing the frontend:
   frame, so CSS transitions never fire and entry animations would replay on every
   card; morphing is required for smoothness. Don't revert `#orders` to plain
   `innerHTML` or drop the per-card `id` without losing this.
+- **Done cards play an exit animation, then leave (decision 2026-06-04, iterated
+  with the user).** An order marked `Done` stays Running ~5 s (`DeliveredDwell`,
+  see [[architecture-decisions]]) before idiomorph removes it. The `"order"`
+  template adds a conditional `done` class (`{{if .Done}} done{{end}}`, beside
+  `fail`); `index.html` defines `@keyframes order-leave` and
+  `.order.done { overflow: hidden; animation: order-leave 1s ease forwards; }`.
+  The keyframes: **grey-in + tiny settle (0→18 %) → slide out to the LEFT
+  (`translateX(-110%)`) + `scale(.85)` + fade to `opacity:0` (18→60 %) → collapse
+  `max-height` 110px→0 so the cards below slide up (60→100 %)**, and the 100 %
+  keyframe also sets **`display:none`** to drop the card out of the grid flow.
+  **Why an animation, not a removal hook:** idiomorph removes the node **instantly**
+  when the server stops listing it, so the only way to animate the exit is *during*
+  the Done window — the node persists across morphs (same `id`, class stays `done`),
+  so a keyframe animation started when `.done` is added plays once, `forwards`-holds
+  the gone state, and the now-invisible node is removed later with no visual change.
+  **Gotcha A — horizontal clip:** the leftward slide needs clipping or it bleeds
+  past the column / adds a horizontal scrollbar, so `.dleft` (the orders column,
+  not `.olist`) has `overflow-x: clip` — chosen because `.olist`'s `px-[18px]`
+  padding keeps the `pulse`/`errp` shadow rings of active cards visible, whereas
+  clipping on `.olist` would crop them. **Gotcha B — residual grid gap (the bug the
+  user spotted):** `.olist` is a grid with `gap-3` (12px); a card collapsed to
+  `max-height:0` but **still in the DOM** keeps the grid's row-gap on both sides, so
+  it left a ~12px offset between neighbors that lingered until idiomorph removed the
+  node seconds later. Fix = the `display:none` at the 100 % keyframe (a discrete
+  property held by `forwards`: the card stays visible for the whole 1 s exit, then
+  drops out of flow at the end), so the grid closes the gap immediately. Don't
+  remove that `display:none`. **Gotcha C (general):** `@keyframes card-in` (entry)
+  animates `opacity`+`transform`; `.order` applies it with `animation: card-in
+  0.35s ease backwards` — a retaining fill (`both`/`forwards`) would pin the 100 %
+  values and, per the cascade, **animation values beat normal declarations**, so a
+  static state class couldn't override them. (Moot for `.order.done` now that it has
+  its own `order-leave` animation, but keep `backwards` to avoid surprising any
+  future static state class.) Under `@media (prefers-reduced-motion: reduce)`
+  (`.order { animation:none; transition:none }`) the exit is disabled and
+  `.order.done { animation:none; transform:none; filter:grayscale(1); opacity:.55 }`
+  keeps only the informational grey/dim (no slide/collapse).
 - **The SPA is embedded in the backend binary** (`frontend/embed.go` →
   `//go:embed index.html`, served via `http.FileServerFS`). There is no
   `FRONTEND_DIR` env var and no `COPY frontend/` in `Dockerfile.backend`.

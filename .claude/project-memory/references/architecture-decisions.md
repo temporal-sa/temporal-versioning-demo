@@ -79,11 +79,21 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   the instructive part of the demo is the v2/v3 rollout, not bootstrapping v1.
 - **Friendly version labels** in the deployment panel come from CreateTime
   ordering of the Describe version summaries (oldest = v1).
-- **Timing:** every work step takes ~15 s of **activity** time (`StepDwell`,
-  including the final `Deliver`/"Done" step), so a full order is ~60-90 s; order
+- **Timing:** each work step takes ~15 s of **activity** time (`StepDwell`),
+  **except the final `Deliver`/"Done" step, which is shorter — `DeliveredDwell`
+  = 5 s (decision 2026-06-04)**, so a full v1 order is ~50 s (3×15 s + 5 s); order
   generator starts one order every 6 s; UI ramp increments 10/25/50/100 %. The
   dwell is simulated **inside the activities (no `workflow.Sleep`/timers)** — see
-  [[workflow-waits-activity-side]].
+  [[workflow-waits-activity-side]]. **Why the final step is shorter:** the order is
+  marked `Done` right before `Deliver` runs and the dashboard lists only *Running*
+  workflows, so the completed (all-green) card stays on the board for `Deliver`'s
+  dwell, during which the frontend plays its exit animation (greys, slides out, then
+  collapses — see [[frontend-stack-tailwind-htmx]]) before the workflow closes and
+  idiomorph removes it. The user asked Done orders to leave the board faster, so
+  `Deliver` got its own shorter dwell:
+  `Activities.DeliverDwell` (injected `DeliveredDwell` in `Register`; zero in unit
+  tests like the other dwells), distinct from the `StepDwell`-paced earlier steps.
+  See the Done-card visual treatment in [[frontend-stack-tailwind-htmx]].
 - **v3 regression:** the Drone delivery activity always fails; the workflow runs
   a bounded manual retry loop (`maxDroneRetries`) so the order stalls red and
   surfaces a retry count via the query, without unbounded history. Each failing

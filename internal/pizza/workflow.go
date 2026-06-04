@@ -12,6 +12,12 @@ import (
 // into Activities.Dwell), sized so a full order lasts ~60-90s.
 const StepDwell = 15 * time.Second
 
+// DeliveredDwell is the (shorter) dwell of the final Deliver step. The order is
+// marked Done right before Deliver runs, so this is how long the completed
+// (all-green) order stays on the dashboard before its workflow closes and the
+// card leaves the board. Kept short so Done orders don't linger.
+const DeliveredDwell = 5 * time.Second
+
 const maxDroneRetries = 100 // bounded so a stuck v3 order can't bloat history forever
 
 // droneAttempt is how long each (failing) drone delivery attempt takes; it paces the
@@ -81,8 +87,8 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 		case StepDelivered:
 			// The dashboard lists only Running workflows, so an order vanishes the moment
 			// its workflow completes. Mark it done before the final activity runs so the
-			// completed (all-green) stepper is visible for that activity's dwell, then the
-			// workflow closes and the order leaves the board.
+			// completed (all-green) stepper is visible for the (shorter) DeliveredDwell of
+			// the Deliver activity, then the workflow closes and the order leaves the board.
 			state.Done = true
 			if err := workflow.ExecuteActivity(ctx, a.Deliver, in).Get(ctx, nil); err != nil {
 				return err
@@ -126,5 +132,5 @@ func Register(w worker.Worker, v Version) {
 		Name:               WorkflowTypeName,
 		VersioningBehavior: workflow.VersioningBehaviorPinned,
 	})
-	w.RegisterActivity(&Activities{Dwell: StepDwell, DroneAttempt: droneAttempt})
+	w.RegisterActivity(&Activities{Dwell: StepDwell, DroneAttempt: droneAttempt, DeliverDwell: DeliveredDwell})
 }
