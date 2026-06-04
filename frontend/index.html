@@ -4,12 +4,60 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pizza Tracker</title>
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body>
-    <main>
-      <h1>🍕 Pizza Tracker</h1>
-      <p>UI placeholder — the live worker-versioning dashboard goes here.</p>
-      <!-- TODO: implement the Pizza Tracker SPA (see docs/superpowers/specs). -->
-    </main>
+    <div class="app">
+      <header class="top">
+        <div class="logo">🍕 Pizza Tracker</div>
+        <div class="dep">· deployment <b id="dep">—</b></div>
+        <div class="live"><span class="dotlive"></span> live</div>
+      </header>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="l">In flight</div>
+          <div class="v" id="kpi-inflight">—</div>
+        </div>
+        <div class="kpi">
+          <div class="l">Current</div>
+          <div class="v" id="kpi-current">—</div>
+        </div>
+        <div class="kpi">
+          <div class="l">Ramping</div>
+          <div class="v" id="kpi-ramping">—</div>
+        </div>
+      </div>
+
+      <div class="dbody">
+        <section class="dleft">
+          <div class="sect">
+            Live orders<span class="count" id="orders-count"></span>
+          </div>
+          <div class="olist" id="orders"></div>
+        </section>
+
+        <aside class="dright">
+          <div class="sect">Deployment</div>
+          <div id="versions"></div>
+
+          <div class="controls">
+            <div class="ramp-row">
+              <button class="btn" data-ramp="10">10%</button>
+              <button class="btn" data-ramp="25">25%</button>
+              <button class="btn" data-ramp="50">50%</button>
+              <button class="btn" data-ramp="100">100%</button>
+            </div>
+            <button class="btn" id="btn-promote">Promote</button>
+            <button class="btn danger" id="btn-rollback">⟲ Rollback</button>
+            <button class="btn" id="btn-recover">Recover stuck orders</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
   </body>
 </html>

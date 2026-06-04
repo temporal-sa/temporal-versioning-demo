@@ -1,0 +1,534 @@
+/* Pizza Tracker — Worker Versioning demo dashboard.
+   Ported from docs/superpowers/mockups/responsive-ui.html (locked design):
+   the mockup's two preview frames are collapsed into a single, real
+   full-viewport layout (desktop split / mobile stacked). */
+
+:root {
+  --blue: #2563eb;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e7e7ee;
+  background: #0e0e13;
+}
+
+/* ===== App shell: full-height flex column ===== */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  background: #15151d;
+  border-bottom: 1px solid #23232c;
+  flex-shrink: 0;
+}
+
+.top .logo {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.top .dep {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.top .live {
+  margin-left: auto;
+  font-size: 11px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  opacity: 0.85;
+}
+
+.dotlive {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: beat 1.4s infinite;
+}
+
+@keyframes beat {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* ===== KPI strip ===== */
+.kpis {
+  display: flex;
+  gap: 1px;
+  background: #23232c;
+  border-bottom: 1px solid #23232c;
+  flex-shrink: 0;
+}
+
+.kpi {
+  flex: 1;
+  background: #0e0e13;
+  padding: 11px 16px;
+}
+
+.kpi .l {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.5;
+}
+
+.kpi .v {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.kpi .v small {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* ===== Body: two columns on desktop ===== */
+.dbody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.dleft {
+  flex: 1.7;
+  min-width: 0;
+  padding: 16px 18px;
+  border-right: 1px solid #23232c;
+  display: flex;
+  flex-direction: column;
+}
+
+.dright {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+.sect {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.55;
+  margin-bottom: 13px;
+  display: flex;
+}
+
+.sect .count {
+  margin-left: auto;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* ===== Live orders list (the only flex:1 scrolling region) ===== */
+.olist {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  margin-right: -6px;
+}
+
+.olist::-webkit-scrollbar {
+  width: 7px;
+}
+
+.olist::-webkit-scrollbar-thumb {
+  background: #2c2c38;
+  border-radius: 4px;
+}
+
+/* ===== Version badges + status chips ===== */
+.vb {
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.b-v1 {
+  background: var(--blue);
+}
+
+.b-v2 {
+  background: var(--green);
+}
+
+.b-v3 {
+  background: var(--amber);
+}
+
+.chip {
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.c-cur {
+  background: #0c4a6e;
+  color: #bae6fd;
+}
+
+.c-ramp {
+  background: #5a3a12;
+  color: #fde68a;
+}
+
+.c-drain {
+  background: #3f3f46;
+  color: #d4d4d8;
+}
+
+.c-inact {
+  background: #27272e;
+  color: #9ca3af;
+}
+
+/* ===== Order card + stepper ===== */
+.order {
+  background: #15151d;
+  border: 1px solid #20202a;
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+}
+
+.order.fail {
+  border-color: #5b1d1d;
+  background: #1a1416;
+}
+
+.oh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  margin-bottom: 13px;
+  flex-wrap: wrap;
+}
+
+.oh .nm {
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.oh .el {
+  margin-left: auto;
+  font-size: 10.5px;
+  opacity: 0.45;
+}
+
+.retry {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fca5a5;
+  background: #3f1212;
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+.stepper {
+  display: flex;
+  align-items: flex-start;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.conn {
+  flex: 1;
+  height: 3px;
+  background: #2c2c38;
+  margin-top: 9px;
+  border-radius: 2px;
+  min-width: 6px;
+}
+
+.conn.fill {
+  background: var(--green);
+}
+
+.dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  background: #15151d;
+  border: 2px solid #2c2c38;
+  color: #6b7280;
+}
+
+.lbl {
+  margin-top: 7px;
+  font-size: 9px;
+  opacity: 0.55;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.node.done .dot {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.node.cur .dot {
+  background: #facc15;
+  border-color: #facc15;
+  color: #111;
+  animation: pulse 1.5s ease-out infinite;
+}
+
+.node.cur .dot::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #111;
+}
+
+.node.cur .lbl {
+  opacity: 1;
+  color: #facc15;
+  font-weight: 700;
+}
+
+.node.err .dot {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  animation: errp 1.2s infinite;
+}
+
+.node.err .lbl {
+  opacity: 1;
+  color: #fca5a5;
+  font-weight: 700;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(250, 204, 21, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+  }
+}
+
+@keyframes errp {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+/* ===== Deployment panel ===== */
+.ver {
+  background: #15151d;
+  border: 1px solid #20202a;
+  border-radius: 11px;
+  padding: 12px;
+  margin-bottom: 11px;
+}
+
+.ver.inactive {
+  opacity: 0.55;
+}
+
+.vrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
+}
+
+.vrow .chip {
+  margin-left: auto;
+}
+
+.bar {
+  height: 7px;
+  border-radius: 4px;
+  background: #2c2c38;
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+}
+
+.pin {
+  font-size: 10.5px;
+  opacity: 0.6;
+  margin-top: 8px;
+}
+
+.pin.warn {
+  color: #fca5a5;
+  opacity: 1;
+}
+
+/* ===== Buttons ===== */
+.controls {
+  margin-top: 16px;
+}
+
+.ramp-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ramp-row .btn {
+  flex: 1;
+}
+
+.btn {
+  text-align: center;
+  border-radius: 9px;
+  padding: 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid #2c2c38;
+  background: #1b1b24;
+  color: #e7e7ee;
+  margin-top: 9px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn:hover:not(:disabled) {
+  background: #23232f;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.active {
+  border-color: var(--amber);
+  color: #fde68a;
+}
+
+.btn.danger {
+  background: #7f1d1d;
+  border-color: #7f1d1d;
+  color: #fff;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+/* ===== Toast (transient error messages) ===== */
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #3f1212;
+  color: #fca5a5;
+  border: 1px solid #7f1d1d;
+  border-radius: 9px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+/* ===== Mobile: single scrolling column ===== */
+@media (max-width: 760px) {
+  .app {
+    overflow-y: auto;
+  }
+
+  .dbody {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .dleft {
+    flex: none;
+    border-right: none;
+  }
+
+  /* On mobile the whole app scrolls, so the orders list is not an
+     internal scroll region. */
+  .olist {
+    overflow: visible;
+    padding-right: 0;
+    margin-right: 0;
+  }
+
+  .dright {
+    flex: none;
+    overflow: visible;
+  }
+
+  /* Pizza name is hidden on small screens to keep the header compact. */
+  .oh .nm {
+    display: none;
+  }
+}
