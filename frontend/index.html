@@ -19,6 +19,8 @@
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-response-targets@2"></script>
+    <!-- Idiomorph htmx extension (pre-1.0 → floating @0); registers the "morph" swap. -->
+    <script src="https://cdn.jsdelivr.net/npm/idiomorph@0/dist/idiomorph-ext.min.js"></script>
 
     <!--
       Styling ported 1:1 from the locked app.css design. Plain utilities are
@@ -71,6 +73,19 @@
           }
           100% {
             opacity: 0;
+          }
+        }
+
+        /* New order card entry: morphed (persisted) cards keep their node and do
+           not replay this; only a genuinely new DOM node runs it once. */
+        @keyframes card-in {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
       }
@@ -263,6 +278,8 @@
         @apply rounded-xl p-[13px_14px];
         background: #15151d;
         border: 1px solid #20202a;
+        /* Runs once per new DOM node; idiomorph preserves existing cards. */
+        animation: card-in 0.35s ease both;
       }
 
       .order.fail {
@@ -317,6 +334,8 @@
       .stepper::after {
         width: calc((100% - 20px) * var(--fill, 0) / 100);
         background: var(--color-green);
+        /* Slide the fill when --fill changes on a morphed (persisted) node. */
+        transition: width 0.6s ease;
       }
 
       .node {
@@ -330,6 +349,11 @@
         background: #15151d;
         border: 2px solid #2c2c38;
         color: #6b7280;
+        /* Animate state changes as the node class flips ""/cur/done/err. */
+        transition:
+          background-color 0.4s ease,
+          border-color 0.4s ease,
+          color 0.4s ease;
       }
 
       .lbl {
@@ -337,6 +361,9 @@
         width: max-content;
         max-width: 84px;
         line-height: 1.1;
+        transition:
+          opacity 0.4s ease,
+          color 0.4s ease;
       }
 
       /* Anchor the end labels inward so they never overflow the card edge. */
@@ -386,6 +413,19 @@
         opacity: 1;
         color: #fca5a5;
         font-weight: 700;
+      }
+
+      /* Disable the smoothing/entry motion added above for reduced-motion users. */
+      @media (prefers-reduced-motion: reduce) {
+        .order {
+          animation: none;
+        }
+
+        .stepper::after,
+        .dot,
+        .lbl {
+          transition: none;
+        }
       }
 
       /* ===== Deployment panel ===== */
@@ -490,7 +530,7 @@
     </style>
   </head>
 
-  <body hx-ext="sse,response-targets">
+  <body hx-ext="sse,response-targets,morph">
     <div class="app" sse-connect="/events">
       <header class="top">
         <div class="logo">
@@ -531,7 +571,7 @@
       <div class="dbody">
         <section class="dleft">
           <div class="sect">Live orders</div>
-          <div class="olist" id="orders" sse-swap="orders"></div>
+          <div class="olist" id="orders" sse-swap="orders" hx-swap="morph:innerHTML"></div>
         </section>
 
         <aside class="dright">

@@ -26,6 +26,22 @@ rules when changing the frontend:
   errors/toasts use `htmx-ext-response-targets` into `#toast` with a pure-CSS
   auto-dismiss. The `DashboardState` model and `BuildState` are unchanged — only
   presentation changed.
+- **The live `#orders` region morphs, it does not replace (decision
+  2026-06-04).** To animate new orders and step transitions smoothly, `#orders`
+  uses idiomorph: CDN `idiomorph@0` `idiomorph-ext.min.js` (jsdelivr, floating
+  major tag), `hx-ext="sse,response-targets,morph"` on `<body>`, and
+  `hx-swap="morph:innerHTML"` on the `#orders` div. **Each order card carries a
+  stable `id="order-{ID}"`** (rendered in the `"order"` template) so idiomorph's
+  id-set matching keeps existing cards as persistent DOM nodes. That persistence
+  is what makes the animations work: a once-only `@keyframes card-in` on `.order`
+  (replays only on genuinely new nodes, not on every tick), a `transition: width`
+  on `.stepper::after` driven by `--fill`, and color transitions on `.dot`/`.lbl`
+  as node classes flip — all disabled under `@media (prefers-reduced-motion:
+  reduce)`. **Gotcha:** a plain `innerHTML` swap (still used by the other
+  sse-swap targets `kpis`/`versions`/`controls`) destroys/recreates nodes every
+  frame, so CSS transitions never fire and entry animations would replay on every
+  card; morphing is required for smoothness. Don't revert `#orders` to plain
+  `innerHTML` or drop the per-card `id` without losing this.
 - **The SPA is embedded in the backend binary** (`frontend/embed.go` →
   `//go:embed index.html`, served via `http.FileServerFS`). There is no
   `FRONTEND_DIR` env var and no `COPY frontend/` in `Dockerfile.backend`.
