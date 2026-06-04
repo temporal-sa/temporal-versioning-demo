@@ -29,6 +29,11 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   (`ResetWorkflowExecution` to the first WorkflowTaskCompleted with a
   `PostResetOperation_UpdateWorkflowOptions` carrying a pinned `VersioningOverride`
   to the current/v2 Build ID).
+- **Ramp/Promote use `AllowNoPollers: true` + `IgnoreMissingTaskQueues: true`**
+  on purpose: in the demo the operator clicks ramp/promote right after shipping
+  a new version, before its (single-replica) poller has registered, and the
+  default `false` would reject the call with `FailedPrecondition` and break the
+  demo. Recover pages through all open orders up to a 200 cap (oldest-first).
 - **Friendly version labels** in the deployment panel come from CreateTime
   ordering of the Describe version summaries (oldest = v1).
 - **Timing:** 15 s dwell between steps (full order ~60-90 s); order generator
