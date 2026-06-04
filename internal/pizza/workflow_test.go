@@ -2,7 +2,6 @@ package pizza_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
 	"go.temporal.io/sdk/testsuite"
@@ -44,31 +43,33 @@ func TestV3StallsOnDrone(t *testing.T) {
 	env := ts.NewTestWorkflowEnvironment()
 	env.RegisterActivity(&pizza.Activities{})
 
-	// Query the state shortly before the drone step would be reached, then again
-	// while it is failing.
-	env.RegisterDelayedCallback(func() {
-		val, err := env.QueryWorkflow(pizza.GetStateQuery)
-		if err != nil {
-			t.Errorf("query failed: %v", err)
-			return
-		}
-		var st pizza.OrderState
-		_ = val.Get(&st)
-		if st.Version != "v3" {
-			t.Errorf("expected version v3, got %q", st.Version)
-		}
-		if !st.Failing || st.RetryCount < 1 {
-			t.Errorf("expected drone step to be failing with retries, got %+v", st)
-		}
-		if st.Steps[st.CurrentStep] != pizza.StepDroneDelivery {
-			t.Errorf("expected current step Drone, got %v", st.Steps[st.CurrentStep])
-		}
-	}, 80*time.Second)
-
 	env.ExecuteWorkflow(pizza.PizzaOrderV3, pizza.OrderInput{OrderID: 3, Pizza: "Diavola"})
-	// v3 stalls on the bounded retry loop; the test env runs out the loop and the
-	// workflow eventually finishes with an error after maxDroneRetries.
+
+	// v3 stalls on the always-failing drone: the bounded retry loop runs out and the
+	// workflow ultimately finishes with an error. No workflow timers are involved —
+	// each attempt is paced by the DroneDelivery activity itself.
+	if !env.IsWorkflowCompleted() {
+		t.Fatal("workflow did not complete")
+	}
 	if err := env.GetWorkflowError(); err == nil {
 		t.Fatal("v3 should ultimately error on drone delivery")
+	}
+
+	// The final state surfaces the stall: stuck on the drone step, marked failing,
+	// with the retry count recorded.
+	val, err := env.QueryWorkflow(pizza.GetStateQuery)
+	if err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	var st pizza.OrderState
+	_ = val.Get(&st)
+	if st.Version != "v3" {
+		t.Errorf("expected version v3, got %q", st.Version)
+	}
+	if !st.Failing || st.RetryCount < 1 {
+		t.Errorf("expected drone step to be failing with retries, got %+v", st)
+	}
+	if st.Steps[st.CurrentStep] != pizza.StepDroneDelivery {
+		t.Errorf("expected current step Drone, got %v", st.Steps[st.CurrentStep])
 	}
 }

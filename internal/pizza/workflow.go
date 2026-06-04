@@ -8,10 +8,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// StepDwell is the pause between steps, sized so a full order lasts ~60-90s.
+// StepDwell is the per-step work time simulated inside the activities (injected
+// into Activities.Dwell), sized so a full order lasts ~60-90s.
 const StepDwell = 15 * time.Second
 
 const maxDroneRetries = 100 // bounded so a stuck v3 order can't bloat history forever
+
+// droneAttempt is how long each (failing) drone delivery attempt takes; it paces the
+// v3 retry loop from the activity side so no workflow timer is needed.
+const droneAttempt = 5 * time.Second
 
 // PizzaOrderV1 runs the 4-step baseline pipeline.
 func PizzaOrderV1(ctx workflow.Context, in OrderInput) error {
@@ -41,7 +46,7 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 	}
 
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Second,
+		StartToCloseTimeout: StepDwell + 15*time.Second,
 		// Fail fast: the workflow owns the retry loop so it can surface RetryCount.
 		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1},
 	}
@@ -74,18 +79,17 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 				return err
 			}
 		case StepDelivered:
+			// The dashboard lists only Running workflows, so an order vanishes the moment
+			// its workflow completes. Mark it done before the final activity runs so the
+			// completed (all-green) stepper is visible for that activity's dwell, then the
+			// workflow closes and the order leaves the board.
+			state.Done = true
 			if err := workflow.ExecuteActivity(ctx, a.Deliver, in).Get(ctx, nil); err != nil {
 				return err
 			}
 		}
-
-		// Dwell between steps (except after the terminal Delivered step).
-		if label != StepDelivered {
-			_ = workflow.Sleep(ctx, StepDwell)
-		}
 	}
 
-	state.Done = true
 	return nil
 }
 
@@ -102,7 +106,6 @@ func runDrone(ctx workflow.Context, state *OrderState, a Activities, in OrderInp
 		lastErr = err
 		state.Failing = true
 		state.RetryCount = attempt
-		_ = workflow.Sleep(ctx, 5*time.Second)
 	}
 	return lastErr
 }
@@ -123,5 +126,5 @@ func Register(w worker.Worker, v Version) {
 		Name:               WorkflowTypeName,
 		VersioningBehavior: workflow.VersioningBehaviorPinned,
 	})
-	w.RegisterActivity(&Activities{})
+	w.RegisterActivity(&Activities{Dwell: StepDwell, DroneAttempt: droneAttempt})
 }

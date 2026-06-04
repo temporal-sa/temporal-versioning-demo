@@ -74,11 +74,16 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   the instructive part of the demo is the v2/v3 rollout, not bootstrapping v1.
 - **Friendly version labels** in the deployment panel come from CreateTime
   ordering of the Describe version summaries (oldest = v1).
-- **Timing:** 15 s dwell between steps (full order ~60-90 s); order generator
-  starts one order every 6 s; UI ramp increments 10/25/50/100 %.
+- **Timing:** every work step takes ~15 s of **activity** time (`StepDwell`,
+  including the final `Deliver`/"Done" step), so a full order is ~60-90 s; order
+  generator starts one order every 6 s; UI ramp increments 10/25/50/100 %. The
+  dwell is simulated **inside the activities (no `workflow.Sleep`/timers)** — see
+  [[workflow-waits-activity-side]].
 - **v3 regression:** the Drone delivery activity always fails; the workflow runs
   a bounded manual retry loop (`maxDroneRetries`) so the order stalls red and
-  surfaces a retry count via the query, without unbounded history.
+  surfaces a retry count via the query, without unbounded history. Each failing
+  attempt takes ~5 s of **activity** time (`droneAttempt`); the loop no longer
+  uses `workflow.Sleep` for backoff (see [[workflow-waits-activity-side]]).
 
 **Why:** These are non-obvious choices (not derivable from a fresh read of the
 code) made during planning to satisfy the spec's narrative and timing.
