@@ -15,3 +15,6 @@ docs/superpowers/
 
 # Per-subagent scratch memory (project memory lives in .claude/project-memory/)
 .claude/agent-memory/
+
+# cmux isolated worktrees
+.worktrees/
