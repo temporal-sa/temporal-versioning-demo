@@ -12,3 +12,11 @@ tmp_dir = "tmp"
 
 [log]
   main_only = false
+
+# Live-reload proxy: serves the dashboard on :8090, injects a reload script into
+# HTML responses, and refreshes the browser after each successful rebuild. It
+# forwards to the app on :8080; SSE (text/event-stream) responses pass through.
+[proxy]
+  enabled = true
+  proxy_port = 8090
+  app_port = 8080

@@ -44,11 +44,12 @@ infra-logs: ## Follow Temporal dev server logs
 ##@ App (host, hot reload)
 
 .PHONY: dev
-dev: infra-up ## Start Temporal, then run backend + worker v1 on the host
+dev: infra-up ## Start Temporal + backend + worker v1; open http://localhost:8090
 	@$(MAKE) -j backend worker
 
 .PHONY: backend
-backend: ## Run the backend on :8080 with hot reload (requires Air)
+backend: ## Run the backend with hot reload via Air (dashboard :8090 live-reload, app :8080)
+	@echo "Dashboard with live reload: http://localhost:8090"
 	TEMPORAL_ADDRESS=$(TEMPORAL_ADDRESS) TEMPORAL_NAMESPACE=$(TEMPORAL_NAMESPACE) \
 		PIZZA_DEPLOYMENT_NAME=$(DEPLOYMENT_NAME) PIZZA_TASK_QUEUE=$(PIZZA_TASK_QUEUE) \
 		air -c .air.toml

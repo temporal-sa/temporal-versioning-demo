@@ -168,7 +168,12 @@ make worker-v3   # ship v3
 ```
 
 The Temporal Web UI is at <http://localhost:8233> and the
-Pizza Tracker dashboard at <http://localhost:8080>.
+Pizza Tracker dashboard at <http://localhost:8090>, the Air
+live-reload proxy. Edit Go code or `frontend/index.html` and
+Air rebuilds the binary and refreshes the browser
+automatically on every rebuild. The raw backend is still on
+<http://localhost:8080> (no auto-reload) if you want to
+bypass the proxy.
 
 **Full Docker flow** — builds and runs every component in
 containers:
