@@ -150,6 +150,9 @@
 
       .dright {
         @apply min-w-0 flex-1 overflow-y-auto px-[18px] py-4 max-[760px]:flex-none max-[760px]:overflow-visible;
+        /* Always reserve the scrollbar gutter so the column doesn't shift when
+           the scrollbar toggles. */
+        scrollbar-gutter: stable;
       }
 
       .sect {
@@ -167,6 +170,9 @@
         @apply min-h-0 flex-1 overflow-y-auto max-[760px]:overflow-visible;
         padding-right: 6px;
         margin-right: -6px;
+        /* Always reserve the scrollbar gutter so rows don't shift when the
+           scrollbar toggles as orders are added/removed. */
+        scrollbar-gutter: stable;
       }
 
       .olist::-webkit-scrollbar {
@@ -192,6 +198,13 @@
         .olist {
           padding-right: 0;
           margin-right: 0;
+          /* No internal scroll region here, so the reserved gutter is pointless. */
+          scrollbar-gutter: auto;
+        }
+
+        .dright {
+          /* overflow-visible on mobile, so the reserved gutter is pointless. */
+          scrollbar-gutter: auto;
         }
 
         /* Pizza name is hidden on small screens to keep the header compact. */
