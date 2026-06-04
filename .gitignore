@@ -12,3 +12,6 @@
 
 # Design spec — kept local, not committed
 docs/superpowers/
+
+# Per-subagent scratch memory (project memory lives in .claude/project-memory/)
+.claude/agent-memory/
