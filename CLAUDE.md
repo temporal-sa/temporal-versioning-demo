@@ -3,10 +3,7 @@
 A customer-facing demo of Temporal **Worker Versioning** on
 Kubernetes, built around a live **Pizza Tracker** dashboard.
 
-See [README.md](README.md) for full documentation. A detailed
-design spec is kept locally under `docs/superpowers/specs/`
-(not committed) and covers the full narrative, UI and
-architecture.
+See [README.md](README.md) for full documentation.
 
 ## Tech stack
 
