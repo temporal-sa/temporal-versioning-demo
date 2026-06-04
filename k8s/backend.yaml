@@ -1,0 +1,60 @@
+# Pizza Tracker backend: polls Temporal, streams dashboard state over SSE,
+# generates orders, drives routing/recovery actions, and serves the SPA.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pizza-backend
+  namespace: default
+  labels:
+    app: pizza-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pizza-backend
+  template:
+    metadata:
+      labels:
+        app: pizza-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/alexandreroman/pizza-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal-frontend.temporal.svc.cluster.local:7233
+            - name: TEMPORAL_NAMESPACE
+              value: default
+            - name: PIZZA_DEPLOYMENT_NAME
+              value: default.pizza
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pizza-backend
+  namespace: default
+spec:
+  selector:
+    app: pizza-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

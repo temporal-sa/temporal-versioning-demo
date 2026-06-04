@@ -9,8 +9,8 @@ kind: Kustomization
 
 namespace: default
 
-# TODO: add the demo resources as they are implemented:
-#   - temporalworkerdeployment.yaml  # versioned pizza worker (Manual strategy)
-#   - backend.yaml                   # backend Deployment + Service
-#   - httproute.yaml                 # Traefik route (pizza.127-0-0-1.nip.io)
-resources: []
+resources:
+  - connection.yaml
+  - workerdeployment.yaml
+  - backend.yaml
+  - httproute.yaml

@@ -1,0 +1,21 @@
+# Traefik Gateway route exposing the Pizza Tracker SPA + API.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: pizza-tracker
+  namespace: default
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+      sectionName: web
+  hostnames:
+    - pizza.127-0-0-1.nip.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: pizza-backend
+          port: 80
