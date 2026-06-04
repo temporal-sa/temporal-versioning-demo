@@ -44,9 +44,10 @@ infra-logs: ## Follow Temporal dev server logs
 ##@ App (host, hot reload)
 
 .PHONY: dev
-dev: infra-up ## Start Temporal + backend + worker v1; open http://localhost:8090
-	# Trap reaps the whole process group (kill 0) on exit/signal so no orphans survive Ctrl-C or a child crash.
-	@trap 'kill 0' EXIT INT TERM; \
+dev: infra-up dev-stop ## Start Temporal + backend + worker v1; open http://localhost:8090
+	# dev-stop pre-flight reclaims :8080/:8090 and reaps orphans from a crashed session.
+	# Trap reaps the whole process group (kill 0) on exit/signal — now also on HUP (closed terminal).
+	@trap 'kill 0' EXIT INT TERM HUP; \
 		( $(MAKE) backend; kill 0 ) & \
 		( $(MAKE) worker; kill 0 ) & \
 		wait
@@ -57,6 +58,13 @@ dev-stop: ## Kill orphaned host dev processes (Air, backend, worker)
 	@pkill -f '$(CURDIR)/tmp/backend' || true
 	@pkill -f 'go run ./cmd/worker' || true
 	@pkill -f 'exe/worker' || true
+	@# Force-free the dev ports: a backend mid graceful-shutdown (SSE keeps
+	@# connections open) can hold :8080 past the pkill above and block restart.
+	@# Target only the LISTENING socket so client connections (e.g. open
+	@# browser tabs) are not killed.
+	@for port in 8080 8090; do \
+		lsof -ti tcp:$$port -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true; \
+	done
 	@echo "Stopped host dev processes (best effort)."
 
 .PHONY: backend
