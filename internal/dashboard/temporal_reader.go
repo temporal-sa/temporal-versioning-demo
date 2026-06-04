@@ -13,12 +13,14 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-// maxOrdersPerTick caps how many open orders are queried per poll, newest first,
-// to keep each poll cheap. Truncation is logged (no silent caps).
+// maxOrdersPerTick caps how many open orders are processed per poll, to keep each
+// poll cheap. Orders are sorted oldest-first (see OpenOrders), so the cap keeps the
+// newest maxOrdersPerTick orders (the tail) and never drops new ones. Truncation is
+// logged (no silent caps).
 const maxOrdersPerTick = 50
 
 // openOrdersQuery selects open PizzaOrder workflows. Results are sorted
-// newest-first in Go (see OpenOrders) rather than via an ORDER BY clause, because
+// oldest-first in Go (see OpenOrders) rather than via an ORDER BY clause, because
 // the dev server's standard (SQLite) visibility store does not support ORDER BY.
 const openOrdersQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running'"
 
@@ -65,7 +67,7 @@ func (r *SDKReader) DeploymentSnapshot(ctx context.Context) (Routing, []VersionS
 	return routing, summaries, nil
 }
 
-// OpenOrders lists open PizzaOrder workflows (capped, newest first), queries
+// OpenOrders lists open PizzaOrder workflows (capped, oldest first), queries
 // getState on each, and returns them with their pinned Build ID and elapsed time.
 // Orders that cannot be queried yet (e.g. mid-start) are skipped.
 func (r *SDKReader) OpenOrders(ctx context.Context) ([]LiveOrder, error) {
@@ -78,17 +80,20 @@ func (r *SDKReader) OpenOrders(ctx context.Context) ([]LiveOrder, error) {
 		return nil, fmt.Errorf("list open orders: %w", err)
 	}
 
-	// Sort newest-first in Go: the standard visibility store does not support
-	// ORDER BY, so ordering cannot be pushed into the query.
+	// Sort oldest-first in Go for stable, jump-free rendering: new orders append at
+	// the end instead of pushing every card down. The standard visibility store does
+	// not support ORDER BY, so ordering cannot be pushed into the query.
 	sort.Slice(resp.Executions, func(i, j int) bool {
-		return resp.Executions[i].GetStartTime().AsTime().After(resp.Executions[j].GetStartTime().AsTime())
+		return resp.Executions[i].GetStartTime().AsTime().Before(resp.Executions[j].GetStartTime().AsTime())
 	})
 
+	// Keep the newest maxOrdersPerTick orders: since the slice is oldest-first, those
+	// are the last elements. This way new orders are never dropped once the cap is hit.
 	executions := resp.Executions
 	if len(executions) > maxOrdersPerTick {
 		r.logger.Info("truncating open orders for this tick",
 			"total", len(executions), "cap", maxOrdersPerTick)
-		executions = executions[:maxOrdersPerTick]
+		executions = executions[len(executions)-maxOrdersPerTick:]
 	}
 
 	orders := make([]LiveOrder, 0, len(executions))

@@ -36,9 +36,14 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   standard (SQLite) visibility store rejects `ORDER BY` in
   `ListWorkflowExecutions` (`invalid query: operation is not supported: 'ORDER BY'
   clause`). The open-orders and recover queries dropped their `ORDER BY StartTime`
-  clauses and sort in Go instead: `openOrdersQuery` newest-first
+  clauses and sort in Go instead: `openOrdersQuery` **oldest-first**
   (`temporal_reader.go`), `recoverQuery` oldest-first after paging all matches
-  (`actions.go`, for deterministic truncation).
+  (`actions.go`, for deterministic truncation). **Correction (2026-06-04):**
+  `openOrdersQuery` was newest-first, changed to **oldest-first** so the dashboard
+  renders order cards oldest → newest; new orders then append at the end instead of
+  pushing every card down, avoiding idiomorph layout "jumps" (`#orders` morph).
+  Because the slice is now oldest-first, the `maxOrdersPerTick` (50) cap keeps the
+  **tail** (`executions[len-cap:]`) so the newest orders are never dropped.
 - **Routing actions (backend → Temporal):** ramp =
   `SetRampingVersion{BuildID,Percentage}`; promote = `SetCurrentVersion{BuildID}`;
   **rollback = `SetRampingVersion{BuildID:"", Percentage:0}`** (safe because
