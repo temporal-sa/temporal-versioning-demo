@@ -31,10 +31,9 @@
     {{- if .Failing}}<span class="retry">⟳ retry {{.RetryCount}}×</span>{{end -}}
     <span class="el">{{elapsed .ElapsedSec}}</span>
   </div>
-  <div class="stepper">
+  <div class="stepper" style="{{stepperStyle .}}">
     {{- range stepNodes . -}}
     <div class="node {{.Class}}"><div class="dot">{{.Glyph}}</div><div class="lbl">{{.Label}}</div></div>
-    {{- if .HasConn}}<div class="conn{{if .ConnFill}} fill{{end}}"></div>{{end -}}
     {{- end -}}
   </div>
 </div>

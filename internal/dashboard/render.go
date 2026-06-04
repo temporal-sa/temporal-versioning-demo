@@ -11,14 +11,12 @@ import (
 var templateFS embed.FS
 
 // stepNode is the per-stepper-node view model: its CSS state class, the glyph
-// shown inside the dot, the step label, and whether a (possibly filled)
-// connector follows it. It mirrors app.js renderStepper exactly.
+// shown inside the dot, and the step label. The connector is now a single track
+// rendered by the stepper container, not per node.
 type stepNode struct {
-	Class    string // "" | "done" | "cur" | "err"
-	Glyph    string // "" | "✓" | "✕"
-	Label    string
-	HasConn  bool
-	ConnFill bool
+	Class string // "" | "done" | "cur" | "err"
+	Glyph string // "" | "✓" | "✕"
+	Label string
 }
 
 // recoverResult is the view model for the toast template.
@@ -64,6 +62,7 @@ func funcMap() template.FuncMap {
 		"versionClass":     versionClass,
 		"elapsed":          formatElapsed,
 		"stepNodes":        stepNodes,
+		"stepperStyle":     stepperStyle,
 		"barWidth":         barWidth,
 		"failingByVersion": failingByVersion,
 		"dict":             dict,
@@ -108,8 +107,9 @@ func formatElapsed(seconds int) string {
 	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
 }
 
-// stepNodes computes the per-node stepper state for an order, matching the
-// logic of app.js renderStepper (done/current/error + connector fill).
+// stepNodes computes the per-node stepper state for an order: the done/current/
+// error class and glyph. The connector is now a single track rendered by the
+// stepper container, not per node.
 func stepNodes(o Order) []stepNode {
 	nodes := make([]stepNode, len(o.Steps))
 	for i, label := range o.Steps {
@@ -124,13 +124,36 @@ func stepNodes(o Order) []stepNode {
 				n.Class = "cur"
 			}
 		}
-		if i < len(o.Steps)-1 {
-			n.HasConn = true
-			n.ConnFill = o.Done || i < o.CurrentStep
-		}
 		nodes[i] = n
 	}
 	return nodes
+}
+
+// stepperStyle returns the inline style that drives the stepper's progress
+// fill: a "--fill:N" custom property where N is the percentage of connector
+// track that is complete (0 when the order has fewer than two steps).
+func stepperStyle(o Order) template.CSS {
+	return template.CSS(fmt.Sprintf("--fill:%d", stepperFillPct(o)))
+}
+
+// stepperFillPct is the percentage of the connector track to paint green:
+// 100% when the order is done, otherwise CurrentStep/(steps-1).
+func stepperFillPct(o Order) int {
+	n := len(o.Steps)
+	if n < 2 {
+		return 0
+	}
+	filled := o.CurrentStep
+	if o.Done {
+		filled = n - 1
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > n-1 {
+		filled = n - 1
+	}
+	return filled * 100 / (n - 1)
 }
 
 // barWidth clamps the traffic percentage to [0,100] for the version bar width.
