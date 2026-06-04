@@ -29,6 +29,24 @@ reintroduce:
   **2 columns** (`MAX_COLS`). `.dleft` is the scroll container with
   `scrollbar-gutter: stable` — without it, a classic scrollbar appearing as the
   list grows shrinks the width and the columns drift.
+- **`.olist` (`#orders`) MUST be `shrink-0`.** It is a flex item of the
+  `flex-col` `.dleft`, and its children are all absolutely positioned, so its
+  `min-height` resolves to 0. The masonry script sets an inline `height` on it,
+  but that is only the flex-basis — without `shrink-0` the flex algorithm
+  collapses `#orders` far below the set height (measured 438px vs 1131px set).
+  Cards still show (they overflow and `.dleft` scrolls them), so the bug is
+  invisible until you need the element's own box: any **bottom padding gets
+  swallowed** and the last card sits flush against the window bottom. Fix is
+  `shrink-0` on `.olist`; then ordinary `padding-bottom` on `.dleft` (`py-4`,
+  the page-standard 16px) spaces the last card correctly. Do NOT fake the gap
+  by padding the
+  script-set `#orders` height — that was a wrong workaround for this real bug.
+- **Body layout is a shared `grid grid-cols-3` (KPI strip + `.dbody`)** so the
+  2/3 column boundary is pixel-identical. `.dbody` needs an explicit
+  `grid-rows-1` (`minmax(0,1fr)`) row track — a grid with no row track gets an
+  `auto` row that grows to content, leaving `.dleft` unbounded so its
+  `overflow-y-auto` never engages and the scrollbar disappears. Reset with
+  `grid-rows-none` on mobile.
 - **Done → visible-then-collapse:** the server adds class `done`; the card stays
   full-height/all-green for `COLLAPSE_DELAY` (4 s), then a one-shot timer sets
   `data-collapsing`, which drives both the CSS collapse and the masonry's

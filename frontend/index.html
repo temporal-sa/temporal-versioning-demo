@@ -157,7 +157,7 @@
          pixel-identical. The 1px gap-px gaps over the #23232c background draw the
          divider line, continuous with and aligned to the KPI strip's divider. */
       .dbody {
-        @apply grid grid-cols-3 min-h-0 flex-1 gap-px max-[760px]:grid-cols-1;
+        @apply grid grid-cols-3 grid-rows-1 min-h-0 flex-1 gap-px max-[760px]:grid-cols-1 max-[760px]:grid-rows-none;
         background: #23232c;
       }
 
@@ -195,8 +195,12 @@
       .olist {
         /* Positioning context for the absolutely-placed cards laid out by the
            masonry script. Height is set inline by that script; scrolling is
-           delegated to the .dleft column (already overflow-y-auto). */
-        @apply relative;
+           delegated to the .dleft column (already overflow-y-auto).
+           shrink-0 is essential: .olist is a flex item of the flex-col .dleft,
+           and its children are absolutely positioned, so its min-height resolves
+           to 0 — without shrink-0 the flex algorithm collapses it below the
+           script-set height, clipping the bottom (and any bottom padding). */
+        @apply relative shrink-0;
       }
 
       @media (max-width: 760px) {
