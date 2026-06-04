@@ -16,10 +16,10 @@ type StepLabel string
 
 // Step labels, ordered by their position in the pipeline.
 const (
-	StepReceived       StepLabel = "Recv"
+	StepReceived       StepLabel = "New"
 	StepCooking        StepLabel = "Cook"
 	StepQualityCheck   StepLabel = "QC"
-	StepOutForDelivery StepLabel = "Deliv"
+	StepOutForDelivery StepLabel = "Out"
 	StepDroneDelivery  StepLabel = "Drone"
 	StepDelivered      StepLabel = "Done"
 )
