@@ -22,8 +22,9 @@ var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promot
 
 // recoverQuery selects every open PizzaOrder workflow; the bad-build filtering is
 // done in Go from each run's pinned Build ID (no reliance on an uncertain search
-// attribute name).
-const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running'"
+// attribute name). ORDER BY StartTime ASC makes truncation deterministic: when
+// the cap is hit, the oldest-stuck orders are recovered first.
+const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' ORDER BY StartTime ASC"
 
 // maxRecoverPerCall caps how many stuck orders one recover call resets, so a huge
 // backlog cannot turn into an unbounded burst of reset RPCs. Truncation is logged.
@@ -49,9 +50,14 @@ func (a *Actions) Ramp(ctx context.Context, pct float32) error {
 		return err
 	}
 	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+	// Demo: the target version's pollers may not be registered yet (single
+	// replica, freshly-shipped version), and its task queues may differ from the
+	// current version. We accept routing to it anyway rather than fail the call.
 	if _, err := h.SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
-		BuildID:    target,
-		Percentage: pct,
+		BuildID:                 target,
+		Percentage:              pct,
+		AllowNoPollers:          true,
+		IgnoreMissingTaskQueues: true,
 	}); err != nil {
 		return fmt.Errorf("set ramping version %q to %.0f%%: %w", target, pct, err)
 	}
@@ -65,8 +71,13 @@ func (a *Actions) Promote(ctx context.Context) error {
 		return err
 	}
 	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+	// Demo: the target version's pollers may not be registered yet (single
+	// replica, freshly-shipped version), and its task queues may differ from the
+	// current version. We accept the full cutover anyway rather than fail the call.
 	if _, err := h.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
-		BuildID: target,
+		BuildID:                 target,
+		AllowNoPollers:          true,
+		IgnoreMissingTaskQueues: true,
 	}); err != nil {
 		return fmt.Errorf("set current version %q: %w", target, err)
 	}
@@ -76,6 +87,9 @@ func (a *Actions) Promote(ctx context.Context) error {
 // Rollback removes the ramp: 100% of new orders snap back to Current.
 func (a *Actions) Rollback(ctx context.Context) error {
 	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+	// Percentage:0 is what clears the ramping version: an empty BuildID alone
+	// maps to "unversioned" rather than "no ramp". Clearing the ramp is safe here
+	// only because Current is non-nil, so new orders snap back to Current.
 	if _, err := h.SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
 		BuildID:    "",
 		Percentage: 0,
@@ -96,22 +110,36 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 		return 0, errors.New("dashboard: no current version to recover onto")
 	}
 
-	resp, err := a.c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Query: recoverQuery,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("list open orders: %w", err)
-	}
-
+	// Page through results until there are no more pages OR we have collected the
+	// cap; without paging, stuck orders beyond the first page would never recover.
 	var stuck []*commonpb.WorkflowExecution
-	for _, exec := range resp.Executions {
-		if pinnedBuildID(exec) == bad {
-			stuck = append(stuck, exec.GetExecution())
+	var pageToken []byte
+	truncated := false
+	for {
+		resp, err := a.c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Query:         recoverQuery,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("list open orders: %w", err)
+		}
+		for _, exec := range resp.Executions {
+			if pinnedBuildID(exec) == bad {
+				stuck = append(stuck, exec.GetExecution())
+			}
+		}
+		if len(stuck) >= maxRecoverPerCall {
+			truncated = len(stuck) > maxRecoverPerCall || len(resp.NextPageToken) > 0
+			stuck = stuck[:maxRecoverPerCall]
+			break
+		}
+		pageToken = resp.NextPageToken
+		if len(pageToken) == 0 {
+			break
 		}
 	}
-	if len(stuck) > maxRecoverPerCall {
-		a.logger.Info("capping recover batch", "stuck", len(stuck), "cap", maxRecoverPerCall)
-		stuck = stuck[:maxRecoverPerCall]
+	if truncated {
+		a.logger.Info("capping recover batch", "cap", maxRecoverPerCall)
 	}
 
 	recovered := 0
@@ -127,8 +155,10 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 	return recovered, nil
 }
 
-// resetWithMove resets one workflow to its first completed Workflow Task and pins
-// it to the good build via a PostResetOperation.
+// resetWithMove resets the listed run to its first completed Workflow Task and
+// pins the resulting new run to the good (current) build via a PostResetOperation.
+// Assumes these are pinned, non-continue-as-new workflows: the first completed
+// Workflow Task is a valid reset point and the run carries a single build ID.
 func (a *Actions) resetWithMove(ctx context.Context, exec *commonpb.WorkflowExecution, goodBuild string) error {
 	resetPoint, err := a.firstWorkflowTaskCompletedID(ctx, exec)
 	if err != nil {
@@ -170,7 +200,9 @@ func (a *Actions) resetWithMove(ctx context.Context, exec *commonpb.WorkflowExec
 }
 
 // firstWorkflowTaskCompletedID scans history for the first WorkflowTaskCompleted
-// event, which is the canonical reset point for a reset-with-move.
+// event, the canonical reset point for a reset-with-move. Assumes a pinned,
+// non-continue-as-new workflow, so the first such event reliably exists in this
+// run's history.
 func (a *Actions) firstWorkflowTaskCompletedID(ctx context.Context, exec *commonpb.WorkflowExecution) (int64, error) {
 	iter := a.c.GetWorkflowHistory(ctx, exec.GetWorkflowId(), exec.GetRunId(), false,
 		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)

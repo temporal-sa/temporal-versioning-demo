@@ -44,7 +44,10 @@ func main() {
 	reader := dashboard.NewSDKReader(c, deploymentName, logger)
 	poller := dashboard.NewPoller(reader, deploymentName, pollInterval, logger, hub.Publish)
 	actions := dashboard.NewActions(c, deploymentName, namespace, logger)
-	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, 0, logger)
+	// Seed startID from the wall clock so order IDs do not reset to order-1 on
+	// every restart and collide with a still-open order from the previous run.
+	// This is backend/client code (not workflow code), so using the clock is fine.
+	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, int(time.Now().Unix()), logger)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           dashboard.NewServer(hub, actions, frontendDir, logger).Routes(),
