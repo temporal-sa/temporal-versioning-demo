@@ -28,7 +28,7 @@ func main() {
 	addr := "0.0.0.0:" + getenv("PORT", "8080")
 	temporalAddress := getenv("TEMPORAL_ADDRESS", "localhost:7233")
 	namespace := getenv("TEMPORAL_NAMESPACE", "default")
-	deploymentName := getenv("PIZZA_DEPLOYMENT_NAME", "default.pizza")
+	deploymentName := getenv("PIZZA_DEPLOYMENT_NAME", "pizza")
 	taskQueue := getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue)
 	pollInterval := durEnv("PIZZA_POLL_INTERVAL", time.Second, logger)
 	orderInterval := durEnv("PIZZA_ORDER_INTERVAL", 6*time.Second, logger)

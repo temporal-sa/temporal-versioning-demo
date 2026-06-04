@@ -22,9 +22,10 @@ var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promot
 
 // recoverQuery selects every open PizzaOrder workflow; the bad-build filtering is
 // done in Go from each run's pinned Build ID (no reliance on an uncertain search
-// attribute name). ORDER BY StartTime ASC makes truncation deterministic: when
-// the cap is hit, the oldest-stuck orders are recovered first.
-const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' ORDER BY StartTime ASC"
+// attribute name). The oldest-first ordering that makes truncation deterministic
+// (oldest-stuck orders recovered first) is applied in Go after paging, because the
+// dev server's standard (SQLite) visibility store does not support ORDER BY.
+const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running'"
 
 // maxRecoverPerCall caps how many stuck orders one recover call resets, so a huge
 // backlog cannot turn into an unbounded burst of reset RPCs. Truncation is logged.
@@ -110,11 +111,12 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 		return 0, errors.New("dashboard: no current version to recover onto")
 	}
 
-	// Page through results until there are no more pages OR we have collected the
-	// cap; without paging, stuck orders beyond the first page would never recover.
-	var stuck []*commonpb.WorkflowExecution
+	// Page through every result: the standard visibility store does not support
+	// ORDER BY, so we cannot rely on server-side ordering for deterministic
+	// truncation and must collect all matches before sorting. The demo's open-order
+	// set is small; maxRecoverPerCall bounds the reset RPCs, not the listing.
+	var stuck []*workflowpb.WorkflowExecutionInfo
 	var pageToken []byte
-	truncated := false
 	for {
 		resp, err := a.c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Query:         recoverQuery,
@@ -125,18 +127,25 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 		}
 		for _, exec := range resp.Executions {
 			if pinnedBuildID(exec) == bad {
-				stuck = append(stuck, exec.GetExecution())
+				stuck = append(stuck, exec)
 			}
-		}
-		if len(stuck) >= maxRecoverPerCall {
-			truncated = len(stuck) > maxRecoverPerCall || len(resp.NextPageToken) > 0
-			stuck = stuck[:maxRecoverPerCall]
-			break
 		}
 		pageToken = resp.NextPageToken
 		if len(pageToken) == 0 {
 			break
 		}
+	}
+
+	// Sort oldest-first in Go so truncation is deterministic: when the cap is hit,
+	// the oldest-stuck orders are recovered first.
+	sort.Slice(stuck, func(i, j int) bool {
+		return stuck[i].GetStartTime().AsTime().Before(stuck[j].GetStartTime().AsTime())
+	})
+
+	truncated := false
+	if len(stuck) > maxRecoverPerCall {
+		truncated = true
+		stuck = stuck[:maxRecoverPerCall]
 	}
 	if truncated {
 		a.logger.Info("capping recover batch", "cap", maxRecoverPerCall)
@@ -144,8 +153,8 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 
 	recovered := 0
 	for _, exec := range stuck {
-		if err := a.resetWithMove(ctx, exec, good); err != nil {
-			a.logger.Warn("recover: reset failed", "workflowId", exec.GetWorkflowId(), "err", err)
+		if err := a.resetWithMove(ctx, exec.GetExecution(), good); err != nil {
+			a.logger.Warn("recover: reset failed", "workflowId", exec.GetExecution().GetWorkflowId(), "err", err)
 			continue
 		}
 		recovered++

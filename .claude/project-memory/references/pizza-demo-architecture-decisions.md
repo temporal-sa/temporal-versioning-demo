@@ -19,9 +19,26 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
   IDs.
 - **Connection.** Temporal frontend =
   `temporal-frontend.temporal.svc.cluster.local:7233`, namespace `default`, task
-  queue `pizza`. The controller auto-generates the Temporal deployment name as
-  `default.pizza` (`<k8s-ns>.<WorkerDeployment-name>`); backend env
-  `PIZZA_DEPLOYMENT_NAME` must match that.
+  queue `pizza`. The Temporal worker deployment name is **`pizza`** (the
+  `WorkerDeployment` CRD `metadata.name`); backend env `PIZZA_DEPLOYMENT_NAME`
+  and worker env `TEMPORAL_DEPLOYMENT_NAME` must be `pizza`. **Correction
+  (2026-06-04):** an earlier version of this note claimed the controller
+  auto-generates `default.pizza` (`<k8s-ns>.<WorkerDeployment-name>`) — that is
+  wrong. Current Temporal **rejects `.` in worker deployment names** (`.` is the
+  reserved separator in the canonical version string `<deployment_name>.<build_id>`,
+  per the Go SDK `WorkerDeploymentInfo.Name` docs). Using `default.pizza` broke
+  both the worker (`Failed to poll for task ... worker deployment name cannot
+  contain '.'`) and the backend (`deployment snapshot failed ... reserved
+  separator '.'`). The hardcoded `default.pizza` was replaced by `pizza` in
+  `Makefile`, `compose.yaml`, `cmd/backend/main.go`, `k8s/backend.yaml`,
+  `README.md`, and `.env.local.example`.
+- **Visibility queries must not use `ORDER BY`.** The Temporal dev server's
+  standard (SQLite) visibility store rejects `ORDER BY` in
+  `ListWorkflowExecutions` (`invalid query: operation is not supported: 'ORDER BY'
+  clause`). The open-orders and recover queries dropped their `ORDER BY StartTime`
+  clauses and sort in Go instead: `openOrdersQuery` newest-first
+  (`temporal_reader.go`), `recoverQuery` oldest-first after paging all matches
+  (`actions.go`, for deterministic truncation).
 - **Routing actions (backend → Temporal):** ramp =
   `SetRampingVersion{BuildID,Percentage}`; promote = `SetCurrentVersion{BuildID}`;
   **rollback = `SetRampingVersion{BuildID:"", Percentage:0}`** (safe because

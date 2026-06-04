@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
@@ -16,8 +17,10 @@ import (
 // to keep each poll cheap. Truncation is logged (no silent caps).
 const maxOrdersPerTick = 50
 
-// openOrdersQuery selects open PizzaOrder workflows, newest first.
-const openOrdersQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' ORDER BY StartTime DESC"
+// openOrdersQuery selects open PizzaOrder workflows. Results are sorted
+// newest-first in Go (see OpenOrders) rather than via an ORDER BY clause, because
+// the dev server's standard (SQLite) visibility store does not support ORDER BY.
+const openOrdersQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running'"
 
 // SDKReader implements TemporalReader using the Temporal SDK client.
 type SDKReader struct {
@@ -74,6 +77,12 @@ func (r *SDKReader) OpenOrders(ctx context.Context) ([]LiveOrder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list open orders: %w", err)
 	}
+
+	// Sort newest-first in Go: the standard visibility store does not support
+	// ORDER BY, so ordering cannot be pushed into the query.
+	sort.Slice(resp.Executions, func(i, j int) bool {
+		return resp.Executions[i].GetStartTime().AsTime().After(resp.Executions[j].GetStartTime().AsTime())
+	})
 
 	executions := resp.Executions
 	if len(executions) > maxOrdersPerTick {

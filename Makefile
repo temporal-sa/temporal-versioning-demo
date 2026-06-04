@@ -17,7 +17,7 @@ endif
 # Connection settings (override via .env.local or the environment).
 TEMPORAL_ADDRESS ?= localhost:7233
 TEMPORAL_NAMESPACE ?= default
-DEPLOYMENT_NAME ?= default.pizza
+DEPLOYMENT_NAME ?= pizza
 PIZZA_TASK_QUEUE ?= pizza
 
 WORKER_BIN := ./bin/worker

@@ -41,7 +41,7 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
-      PIZZA_DEPLOYMENT_NAME: default.pizza
+      PIZZA_DEPLOYMENT_NAME: pizza
       PIZZA_TASK_QUEUE: pizza
     ports:
       - "8080:8080" # Pizza Tracker http://localhost:8080
@@ -61,7 +61,7 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
-      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_DEPLOYMENT_NAME: pizza
       TEMPORAL_WORKER_BUILD_ID: v1-local
       PIZZA_VERSION: v1
       PIZZA_TASK_QUEUE: pizza
@@ -82,7 +82,7 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
-      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_DEPLOYMENT_NAME: pizza
       TEMPORAL_WORKER_BUILD_ID: v2-local
       PIZZA_VERSION: v2
       PIZZA_TASK_QUEUE: pizza
@@ -103,7 +103,7 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
-      TEMPORAL_DEPLOYMENT_NAME: default.pizza
+      TEMPORAL_DEPLOYMENT_NAME: pizza
       TEMPORAL_WORKER_BUILD_ID: v3-local
       PIZZA_VERSION: v3
       PIZZA_TASK_QUEUE: pizza

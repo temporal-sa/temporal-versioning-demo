@@ -221,9 +221,9 @@ flow — click **Promote** in the UI, or use the CLI:
 
 ```bash
 # Get the build id, then promote it:
-temporal worker deployment describe --deployment-name default.pizza
+temporal worker deployment describe --deployment-name pizza
 temporal worker deployment set-current-version \
-  --deployment-name default.pizza --build-id <v1-build-id>
+  --deployment-name pizza --build-id <v1-build-id>
 ```
 
 The dashboard is then available at
@@ -297,7 +297,7 @@ The backend reads:
 | ----------------------- | ------------------------------------ | ---------------- |
 | `TEMPORAL_ADDRESS`      | Temporal frontend gRPC address       | `localhost:7233` |
 | `TEMPORAL_NAMESPACE`    | Temporal namespace                   | `default`        |
-| `PIZZA_DEPLOYMENT_NAME` | Worker Deployment name to describe   | `default.pizza`  |
+| `PIZZA_DEPLOYMENT_NAME` | Worker Deployment name to describe   | `pizza`          |
 | `PIZZA_TASK_QUEUE`      | Task queue orders are started on     | `pizza`          |
 | `PIZZA_POLL_INTERVAL`   | Temporal poll cadence                | `1s`             |
 | `PIZZA_ORDER_INTERVAL`  | New-order cadence                    | `6s`             |
