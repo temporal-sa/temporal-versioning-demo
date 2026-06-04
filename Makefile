@@ -45,7 +45,19 @@ infra-logs: ## Follow Temporal dev server logs
 
 .PHONY: dev
 dev: infra-up ## Start Temporal + backend + worker v1; open http://localhost:8090
-	@$(MAKE) -j backend worker
+	# Trap reaps the whole process group (kill 0) on exit/signal so no orphans survive Ctrl-C or a child crash.
+	@trap 'kill 0' EXIT INT TERM; \
+		( $(MAKE) backend; kill 0 ) & \
+		( $(MAKE) worker; kill 0 ) & \
+		wait
+
+.PHONY: dev-stop
+dev-stop: ## Kill orphaned host dev processes (Air, backend, worker)
+	@pkill -f 'air -c .air.toml' || true
+	@pkill -f '$(CURDIR)/tmp/backend' || true
+	@pkill -f 'go run ./cmd/worker' || true
+	@pkill -f 'exe/worker' || true
+	@echo "Stopped host dev processes (best effort)."
 
 .PHONY: backend
 backend: ## Run the backend with hot reload via Air (dashboard :8090 live-reload, app :8080)
