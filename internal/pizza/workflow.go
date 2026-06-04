@@ -15,8 +15,9 @@ const StepDwell = 15 * time.Second
 // DeliveredDwell is the (shorter) dwell of the final Deliver step. The order is
 // marked Done right before Deliver runs, so this is how long the completed
 // (all-green) order stays on the dashboard before its workflow closes and the
-// card leaves the board. Kept short so Done orders don't linger.
-const DeliveredDwell = 5 * time.Second
+// card leaves the board. Sized so the frontend's delayed collapse finishes
+// before the workflow completes and the card's node is removed.
+const DeliveredDwell = 7 * time.Second
 
 const maxDroneRetries = 100 // bounded so a stuck v3 order can't bloat history forever
 

@@ -42,42 +42,57 @@ rules when changing the frontend:
   frame, so CSS transitions never fire and entry animations would replay on every
   card; morphing is required for smoothness. Don't revert `#orders` to plain
   `innerHTML` or drop the per-card `id` without losing this.
-- **Done cards play an exit animation, then leave (decision 2026-06-04, iterated
-  with the user).** An order marked `Done` stays Running ~5 s (`DeliveredDwell`,
-  see [[architecture-decisions]]) before idiomorph removes it. The `"order"`
-  template adds a conditional `done` class (`{{if .Done}} done{{end}}`, beside
-  `fail`); `index.html` defines `@keyframes order-leave` and
-  `.order.done { overflow: hidden; animation: order-leave 1s ease forwards; }`.
-  The keyframes: **grey-in + tiny settle (0→18 %) → slide out to the LEFT
-  (`translateX(-110%)`) + `scale(.85)` + fade to `opacity:0` (18→60 %) → collapse
-  `max-height` 110px→0 so the cards below slide up (60→100 %)**, and the 100 %
-  keyframe also sets **`display:none`** to drop the card out of the grid flow.
-  **Why an animation, not a removal hook:** idiomorph removes the node **instantly**
-  when the server stops listing it, so the only way to animate the exit is *during*
-  the Done window — the node persists across morphs (same `id`, class stays `done`),
-  so a keyframe animation started when `.done` is added plays once, `forwards`-holds
-  the gone state, and the now-invisible node is removed later with no visual change.
-  **Gotcha A — horizontal clip:** the leftward slide needs clipping or it bleeds
-  past the column / adds a horizontal scrollbar, so `.dleft` (the orders column,
-  not `.olist`) has `overflow-x: clip` — chosen because `.olist`'s `px-[18px]`
-  padding keeps the `pulse`/`errp` shadow rings of active cards visible, whereas
-  clipping on `.olist` would crop them. **Gotcha B — residual grid gap (the bug the
-  user spotted):** `.olist` is a grid with `gap-3` (12px); a card collapsed to
-  `max-height:0` but **still in the DOM** keeps the grid's row-gap on both sides, so
-  it left a ~12px offset between neighbors that lingered until idiomorph removed the
-  node seconds later. Fix = the `display:none` at the 100 % keyframe (a discrete
-  property held by `forwards`: the card stays visible for the whole 1 s exit, then
-  drops out of flow at the end), so the grid closes the gap immediately. Don't
-  remove that `display:none`. **Gotcha C (general):** `@keyframes card-in` (entry)
-  animates `opacity`+`transform`; `.order` applies it with `animation: card-in
-  0.35s ease backwards` — a retaining fill (`both`/`forwards`) would pin the 100 %
-  values and, per the cascade, **animation values beat normal declarations**, so a
-  static state class couldn't override them. (Moot for `.order.done` now that it has
-  its own `order-leave` animation, but keep `backwards` to avoid surprising any
-  future static state class.) Under `@media (prefers-reduced-motion: reduce)`
-  (`.order { animation:none; transition:none }`) the exit is disabled and
-  `.order.done { animation:none; transform:none; filter:grayscale(1); opacity:.55 }`
-  keeps only the informational grey/dim (no slide/collapse).
+- **Live orders use a client-side masonry of pinned columns (decision 2026-06-04,
+  heavily iterated with the user; spec
+  `docs/superpowers/specs/2026-06-04-orders-masonry-columns-design.md`).** Goal:
+  each order is pinned to a column for its lifetime (never reshuffles when others
+  arrive/leave), works at any width, and a completed order stays visible a few
+  seconds then collapses vertically (cards below it **in its column** slide up;
+  other columns don't move). CSS Grid can't do per-column collapse (shared row
+  tracks), so an inline vanilla `<script>` in `index.html` lays the cards out:
+  - **`#orders` (= `.olist`) is `position: relative`** (NOT a grid); each `.order`
+    is `position: absolute` placed via inline `left`/`top`/`width`. `transform` is
+    left free for the `card-in` entry; the glide uses `transition: left/top/width`.
+    The script sets `#orders.style.height` = tallest column. **`.dleft` is the
+    scroll container** (`overflow-y-auto` + **`scrollbar-gutter: stable`**); `.olist`
+    no longer scrolls and must NOT keep `flex-1` (it would collapse `#orders` to 0
+    height in flow → Deployment panel overlap on stacked/mobile layouts).
+  - **Pinning**: `N = clamp(floor((W+GAP)/(MIN_COL+GAP)), 1, 3)` with `MIN_COL=360`,
+    `GAP=12`. Each card stores its column in `dataset.col`, kept for life; a new card
+    goes to the shortest column; a full re-pack happens **only** when `N` changes
+    (resize). Relayout on `htmx:afterSettle` (per SSE morph), a `ResizeObserver` on
+    `.dleft`, and `visibilitychange` (rAF is paused in background tabs). First
+    placement suppresses the transition (no fly-in from 0,0).
+  - **Done → visible-then-collapse**: server adds class `done` (`{{if .Done}}…`).
+    The card then stays **full-height, full-colour (all-green stepper)** for
+    `COLLAPSE_DELAY` (4000 ms); a one-shot JS timer (guarded by `data-done-seen`)
+    then sets **`data-collapsing`**, which drives BOTH the CSS collapse
+    (`.order[data-collapsing] { overflow:hidden; max-height:0; opacity:0;
+    filter:grayscale(1); padding/border 0 }`) AND the masonry's zero-height
+    treatment (`height = card.dataset.collapsing ? 0 : card.offsetHeight`) so
+    neighbours glide up only when it actually collapses. `DeliveredDwell`=7 s (see
+    [[architecture-decisions]]) keeps the workflow Running long enough for the
+    delayed collapse to finish before idiomorph removes the node (removal is
+    instant — no exit hook — which is why the exit is animated *during* the window).
+  - **CRITICAL idiomorph gotcha (caused flicker AND column reshuffle):** idiomorph
+    syncs attributes on every morph and **removes any attribute the server didn't
+    render**. The server renders `.order` with no `style` and no `data-*`, so each
+    morph stripped the masonry's inline `style` (→ cards flashed to 0,0 every
+    second = flicker) and `data-col` (→ pin lost → re-pack → columns reshuffled on
+    every add/remove). Fix: a global
+    `Idiomorph.defaults.callbacks.beforeAttributeUpdated` returning `false` for
+    `attr === "style" || attr.indexOf("data-") === 0` on `.order` nodes (chained to
+    any prior callback). **The script owns `style` + all `data-*` on `.order`; do
+    not let idiomorph touch them.**
+  - **Scrollbar gutter:** without `scrollbar-gutter: stable` on `.dleft`, a
+    width-taking (classic) scrollbar appearing as the list grows shrinks
+    `#orders.clientWidth`, so `colWidth`/`left` recompute and the columns drift
+    left. The stable gutter keeps the width constant.
+  - `card-in` (entry) animates `opacity`+`transform` and must keep
+    `animation: … backwards` (a retaining `both`/`forwards` fill would pin its
+    end-state and, per the cascade, beat normal declarations). Under
+    `@media (prefers-reduced-motion: reduce)` `.order { animation:none;
+    transition:none }` makes placement and the collapse instant.
 - **The SPA is embedded in the backend binary** (`frontend/embed.go` →
   `//go:embed index.html`, served via `http.FileServerFS`). There is no
   `FRONTEND_DIR` env var and no `COPY frontend/` in `Dockerfile.backend`.

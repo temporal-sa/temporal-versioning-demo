@@ -80,20 +80,22 @@ open items; verified against Go SDK v1.44.1 / api v1.62.13):
 - **Friendly version labels** in the deployment panel come from CreateTime
   ordering of the Describe version summaries (oldest = v1).
 - **Timing:** each work step takes ~15 s of **activity** time (`StepDwell`),
-  **except the final `Deliver`/"Done" step, which is shorter — `DeliveredDwell`
-  = 5 s (decision 2026-06-04)**, so a full v1 order is ~50 s (3×15 s + 5 s); order
+  **except the final `Deliver`/"Done" step, which has its own `DeliveredDwell`
+  = 7 s (decision 2026-06-04)**, so a full v1 order is ~52 s (3×15 s + 7 s); order
   generator starts one order every 6 s; UI ramp increments 10/25/50/100 %. The
   dwell is simulated **inside the activities (no `workflow.Sleep`/timers)** — see
-  [[workflow-waits-activity-side]]. **Why the final step is shorter:** the order is
-  marked `Done` right before `Deliver` runs and the dashboard lists only *Running*
-  workflows, so the completed (all-green) card stays on the board for `Deliver`'s
-  dwell, during which the frontend plays its exit animation (greys, slides out, then
-  collapses — see [[frontend-stack-tailwind-htmx]]) before the workflow closes and
-  idiomorph removes it. The user asked Done orders to leave the board faster, so
-  `Deliver` got its own shorter dwell:
+  [[workflow-waits-activity-side]]. **Why the final step has its own dwell:** the
+  order is marked `Done` right before `Deliver` runs and the dashboard lists only
+  *Running* workflows, so the completed (all-green) card is on the board for
+  `Deliver`'s dwell. The frontend shows that completed card for ~4 s
+  (`COLLAPSE_DELAY`), then collapses it vertically (see the masonry note in
+  [[frontend-stack-tailwind-htmx]]); `DeliveredDwell` (7 s) is sized to outlast that
+  delayed collapse so the node isn't removed mid-animation. It is
   `Activities.DeliverDwell` (injected `DeliveredDwell` in `Register`; zero in unit
   tests like the other dwells), distinct from the `StepDwell`-paced earlier steps.
-  See the Done-card visual treatment in [[frontend-stack-tailwind-htmx]].
+  **History:** this started at 15 s, was cut to 5 s ("Done orders leave faster"),
+  then raised to 7 s once the visible-then-collapse delay was added. See the
+  Done-card collapse mechanism in [[frontend-stack-tailwind-htmx]].
 - **v3 regression:** the Drone delivery activity always fails; the workflow runs
   a bounded manual retry loop (`maxDroneRetries`) so the order stalls red and
   surfaces a retry count via the query, without unbounded history. Each failing

@@ -88,44 +88,6 @@
             transform: translateY(0);
           }
         }
-
-        /* Done card exit: greys + settles, slides out left while shrinking/fading,
-           then collapses its height so siblings slide up. Holds the gone state
-           (forwards) until idiomorph removes the node. */
-        @keyframes order-leave {
-          0% {
-            filter: grayscale(0);
-            opacity: 1;
-            transform: translateX(0) scale(1);
-            max-height: 110px;
-          }
-          18% {
-            filter: grayscale(1);
-            opacity: 1;
-            transform: translateX(0) scale(0.97);
-            max-height: 110px;
-          }
-          60% {
-            filter: grayscale(1);
-            opacity: 0;
-            transform: translateX(-110%) scale(0.85);
-            max-height: 110px;
-          }
-          100% {
-            filter: grayscale(1);
-            opacity: 0;
-            transform: translateX(-110%) scale(0.85);
-            max-height: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            border-width: 0;
-            /* Discrete property: held until the animation ends (forwards fill), so the
-               card stays visible for the whole exit, then drops out of the grid flow at
-               100% — letting the grid close the residual row-gap immediately instead of
-               waiting for idiomorph to remove the still-Running node seconds later. */
-            display: none;
-          }
-        }
       }
 
       * {
@@ -196,12 +158,12 @@
       }
 
       .dleft {
-        @apply flex flex-1 min-w-0 flex-col px-[18px] py-4 max-[760px]:flex-none max-[760px]:border-r-0;
+        @apply flex flex-1 min-w-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:flex-none max-[760px]:overflow-visible max-[760px]:border-r-0;
         border-right: 1px solid #23232c;
-        /* Clip the leftward slide of leaving Done cards so they don't bleed past
-           the column edge or add a horizontal scrollbar. Clipping here (not on
-           .olist) keeps card pulse-ring shadows visible inside the 18px padding. */
-        overflow-x: clip;
+        /* Always reserve the scrollbar gutter so the masonry columns don't shift
+           left when the scrollbar toggles as orders are added/removed. Inert on
+           mobile, where .dleft is overflow-visible (no internal scroll region). */
+        scrollbar-gutter: stable;
       }
 
       .dright {
@@ -226,23 +188,10 @@
 
       /* ===== Live orders list ===== */
       .olist {
-        @apply grid min-h-0 flex-1
-          grid-cols-[repeat(auto-fill,minmax(min(420px,100%),1fr))] min-[1500px]:grid-cols-3
-          gap-3 content-start items-start overflow-y-auto max-[760px]:overflow-visible;
-        padding-right: 6px;
-        margin-right: -6px;
-        /* Always reserve the scrollbar gutter so rows don't shift when the
-           scrollbar toggles as orders are added/removed. */
-        scrollbar-gutter: stable;
-      }
-
-      .olist::-webkit-scrollbar {
-        width: 7px;
-      }
-
-      .olist::-webkit-scrollbar-thumb {
-        background: #2c2c38;
-        border-radius: 4px;
+        /* Positioning context for the absolutely-placed cards laid out by the
+           masonry script. Height is set inline by that script; scrolling is
+           delegated to the .dleft column (already overflow-y-auto). */
+        @apply relative;
       }
 
       @media (max-width: 760px) {
@@ -254,13 +203,6 @@
 
         .dbody {
           overflow: visible;
-        }
-
-        .olist {
-          padding-right: 0;
-          margin-right: 0;
-          /* No internal scroll region here, so the reserved gutter is pointless. */
-          scrollbar-gutter: auto;
         }
 
         .dright {
@@ -320,13 +262,27 @@
         @apply rounded-xl p-[13px_14px];
         background: #15151d;
         border: 1px solid #20202a;
-        /* Runs once per new DOM node; idiomorph preserves existing cards. */
+        /* The masonry script places cards absolutely within the relative #orders;
+           left/top/width are set inline per layout pass. */
+        position: absolute;
+        left: 0;
+        top: 0;
+        box-sizing: border-box;
+        /* Generous cap so .order.done can transition max-height to 0 (real cards
+           are far shorter, so this never clips a live card). */
+        max-height: 600px;
+        /* card-in animates transform (translateY), which the script never sets —
+           the script positions via left/top — so the two never conflict. */
         animation: card-in 0.35s ease backwards;
-        /* Animates the Done treatment when idiomorph flips the .done class on a kept node. */
+        /* Glide to new positions (left/top/width) and the Done collapse
+           (max-height/opacity/filter). */
         transition:
-          filter 0.5s ease,
+          left 0.45s ease,
+          top 0.45s ease,
+          width 0.45s ease,
+          max-height 0.5s ease,
           opacity 0.5s ease,
-          transform 0.5s ease;
+          filter 0.4s ease;
       }
 
       .order.fail {
@@ -334,12 +290,19 @@
         background: #1a1416;
       }
 
-      /* Done: animate the card out (grey, slide left, collapse) while it lingers
-         before idiomorph removes the node. The animation overrides the inherited
-         card-in shorthand, which has long finished on a card that becomes done. */
-      .order.done {
+      /* Collapse: pure vertical collapse (grey + dim + height → 0). A Done card
+         keeps its normal full appearance (the all-green stepper is the cue)
+         until the masonry script flags it data-collapsing, COLLAPSE_DELAY after
+         it became Done. The script then treats its height as 0, so cards below
+         it in the same column glide up to reuse the freed space. */
+      .order[data-collapsing] {
         overflow: hidden; /* clip own content while the height collapses */
-        animation: order-leave 1s ease forwards;
+        max-height: 0;
+        opacity: 0;
+        filter: grayscale(1);
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
       }
 
       .oh {
@@ -472,17 +435,10 @@
 
       /* Disable the smoothing/entry motion added above for reduced-motion users. */
       @media (prefers-reduced-motion: reduce) {
+        /* Instant positioning and instant collapse: no glide, no animated height. */
         .order {
           animation: none;
           transition: none;
-        }
-
-        /* Keep the informational grey/dim, drop the exit motion entirely. */
-        .order.done {
-          animation: none;
-          transform: none;
-          filter: grayscale(1);
-          opacity: 0.55;
         }
 
         .stepper::after,
@@ -661,5 +617,189 @@
          POST buttons live in #controls; their error responses target #toast
          via the response-targets extension. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
+
+    <!-- Client-side masonry layout for the live order cards.
+
+         The server keeps morphing a flat, oldest-first list of .order cards into
+         #orders (SSE + idiomorph) untouched. This script does NOT move nodes or
+         touch the data pipeline — it only positions the existing cards into
+         independent columns:
+
+           - Each card is pinned to a column (dataset.col) for its lifetime, so it
+             never jumps columns when others arrive or leave.
+           - A new card fills the bottom of the shortest column.
+           - A done card is treated as zero-height, so cards below it in the same
+             column glide up (CSS transitions on left/top/width handle the glide).
+           - The column count adapts to width; a width change forces a re-pack. -->
+    <script>
+      (function () {
+        "use strict";
+
+        var MIN_COL = 360; // minimum usable column width in px
+        var MAX_COLS = 3; // cap matches the dashboard's 3-column intent
+        var GAP = 12; // px gutter between columns/cards (matches gap-3)
+        var COLLAPSE_DELAY = 4000; // ms a Done card stays visible before it collapses
+
+        var orders = document.getElementById("orders");
+        if (!orders) {
+          return; // defensive no-op if the target is absent
+        }
+
+        // idiomorph syncs attributes on each morph and would strip the inline style
+        // (top/left/width) the masonry layout sets — the server-rendered cards have no
+        // style attribute — causing the cards to flash back to 0,0 every SSE tick.
+        // Tell idiomorph to leave .order's style and data-* attributes alone; the
+        // script owns them.
+        if (typeof Idiomorph !== "undefined") {
+          Idiomorph.defaults.callbacks = Idiomorph.defaults.callbacks || {};
+          var prevBeforeAttr = Idiomorph.defaults.callbacks.beforeAttributeUpdated;
+          Idiomorph.defaults.callbacks.beforeAttributeUpdated = function (attr, node, mutationType) {
+            if (
+              (attr === "style" || attr.indexOf("data-") === 0) &&
+              node.nodeType === 1 &&
+              node.classList &&
+              node.classList.contains("order")
+            ) {
+              return false; // skip — the script owns the card's style and data-* attributes (inline position, column pin, collapse state)
+            }
+            if (typeof prevBeforeAttr === "function") {
+              return prevBeforeAttr(attr, node, mutationType);
+            }
+          };
+        }
+
+        var lastColumnCount = 0;
+        var frame = 0;
+
+        function layout() {
+          var width = orders.clientWidth;
+          if (width <= 0) {
+            return; // not laid out / hidden yet
+          }
+
+          var count = Math.max(
+            1,
+            Math.min(MAX_COLS, Math.floor((width + GAP) / (MIN_COL + GAP)))
+          );
+          var colWidth = (width - (count - 1) * GAP) / count;
+
+          // A change in column count invalidates every pin: re-pack from scratch.
+          if (count !== lastColumnCount) {
+            var i;
+            var all = orders.children;
+            for (i = 0; i < all.length; i++) {
+              delete all[i].dataset.col;
+            }
+            lastColumnCount = count;
+          }
+
+          // Running pixel height of each column, used both to place cards and to
+          // pick the shortest column for newcomers.
+          var colHeights = new Array(count).fill(0);
+
+          var cards = orders.children;
+          for (var c = 0; c < cards.length; c++) {
+            var card = cards[c];
+
+            // Pin to a column: keep a valid existing assignment, otherwise drop
+            // the new card into the currently shortest column.
+            var col = parseInt(card.dataset.col, 10);
+            if (isNaN(col) || col >= count) {
+              col = shortestColumn(colHeights);
+              card.dataset.col = String(col);
+            }
+
+            // A freshly morphed-in card has no inline top yet (CSS defaults to
+            // top:0; left:0), so its first placement would otherwise glide in
+            // from the corner via the .order left/top transition. Suppress the
+            // transition for this first placement only; later moves still
+            // animate, and the card-in entry animation (transform) is untouched.
+            var isFirstPlacement = !card.style.top;
+            if (isFirstPlacement) {
+              card.style.transition = "none";
+            }
+            card.style.width = colWidth + "px";
+            card.style.left = col * (colWidth + GAP) + "px";
+            card.style.top = colHeights[col] + "px";
+            if (isFirstPlacement) {
+              // Force a reflow so the no-transition placement is committed, then
+              // restore the stylesheet transition so future moves animate.
+              void card.offsetWidth;
+              card.style.transition = "";
+            }
+
+            // A Done card stays full-height (all-green stepper) for COLLAPSE_DELAY,
+            // then a one-shot timer flags it data-collapsing — only then does it
+            // collapse to zero and let the cards below it glide up to reuse the space.
+            if (card.classList.contains("done") && !card.dataset.doneSeen) {
+              card.dataset.doneSeen = "1";
+              var leaving = card;
+              setTimeout(function () {
+                leaving.dataset.collapsing = "1";
+                scheduleLayout();
+              }, COLLAPSE_DELAY);
+            }
+
+            var height = card.dataset.collapsing ? 0 : card.offsetHeight;
+            if (height > 0) {
+              colHeights[col] += height + GAP;
+            }
+          }
+
+          // Size the positioning context to the tallest column so .dleft scrolls.
+          orders.style.height = Math.max(0, Math.max.apply(null, colHeights)) + "px";
+        }
+
+        function shortestColumn(colHeights) {
+          var best = 0;
+          for (var i = 1; i < colHeights.length; i++) {
+            if (colHeights[i] < colHeights[best]) {
+              best = i;
+            }
+          }
+          return best;
+        }
+
+        // rAF-debounced wrapper: coalesce bursts and guard against re-entrancy.
+        function scheduleLayout() {
+          if (frame) {
+            return;
+          }
+          frame = requestAnimationFrame(function () {
+            frame = 0;
+            layout();
+          });
+        }
+
+        // Relayout after each SSE morph into #orders.
+        document.body.addEventListener("htmx:afterSettle", function (e) {
+          if (
+            e.target.id === "orders" ||
+            (e.target.closest && e.target.closest("#orders"))
+          ) {
+            scheduleLayout();
+          }
+        });
+
+        // Responsive: window resize and panel reflow.
+        // Observe .dleft (the column whose width tracks the viewport), NOT #orders:
+        // the script sets #orders' height every layout, which would otherwise re-fire
+        // the observer on its own writes.
+        var resizeTarget = orders.closest(".dleft") || orders;
+        new ResizeObserver(scheduleLayout).observe(resizeTarget);
+
+        // rAF is paused in background tabs, so cards that morph in while
+        // backgrounded never get positioned. Relayout when the tab is shown.
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) {
+            scheduleLayout();
+          }
+        });
+
+        // Initial layout, and once more after htmx settles the shell.
+        document.addEventListener("DOMContentLoaded", layout);
+        document.body.addEventListener("htmx:afterSettle", scheduleLayout, { once: true });
+      })();
+    </script>
   </body>
 </html>
