@@ -18,8 +18,7 @@
       applied via @apply on semantic component classes (templates stay dumb and
       reuse the same class names the Go html/template emits). Things that cannot
       be expressed as utilities — color/animation theme tokens, @keyframes, the
-      scrollbar, the pulsing-dot ::after, and the toast fade-out — live as raw
-      CSS in this single block.
+      scrollbar, and the toast fade-out — live as raw CSS in this single block.
     -->
     <style type="text/tailwindcss">
       @theme {
@@ -31,21 +30,8 @@
         --color-red: #dc2626;
 
         /* Animations (names map to --animate-* tokens). */
-        --animate-beat: beat 1.4s infinite;
         --animate-pulse-dot: pulse 1.5s ease-out infinite;
         --animate-errp: errp 1.2s infinite;
-
-        @keyframes beat {
-          0% {
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
-          }
-          70% {
-            box-shadow: 0 0 0 7px rgba(34, 197, 94, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-          }
-        }
 
         @keyframes pulse {
           0% {
@@ -117,17 +103,6 @@
 
       .top .dep {
         @apply text-[11px] opacity-60;
-      }
-
-      .top .live {
-        @apply ml-auto flex items-center gap-1.5 text-[11px];
-        opacity: 0.85;
-      }
-
-      .dotlive {
-        @apply size-[7px] rounded-full;
-        background: #22c55e;
-        animation: var(--animate-beat);
       }
 
       /* ===== KPI strip ===== */
@@ -467,7 +442,6 @@
       <header class="top">
         <div class="logo">🍕 Pizza Tracker</div>
         <div class="dep">· deployment <b id="dep" sse-swap="dep">—</b></div>
-        <div class="live"><span class="dotlive"></span> live</div>
       </header>
 
       <div class="kpis" id="kpis" sse-swap="kpis">
