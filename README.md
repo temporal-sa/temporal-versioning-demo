@@ -13,105 +13,255 @@ recovered with zero non-determinism errors.
 
 [ci]: https://github.com/alexandreroman/temporal-versioning-demo/actions
 
-> [!NOTE]
-> 🚧 Under active development. The project structure and
-> design are in place; implementation is in progress.
-
 > [!WARNING]
 > This project is for **demonstration, testing and
-> development** only. It is not production-ready.
+> development** only. It targets a local Kind cluster, runs
+> the Temporal frontend in plaintext (no TLS / API key), and
+> is not production-ready.
 
-## Features
+## What it demonstrates
 
-- **Pinned in-flight workflows** — orders keep running on the
-  worker version they started on; deploys never break them.
-- **Canary ramping** — shift a percentage of new orders onto
-  a new version (10% → 50% → 100%) straight from the UI.
-- **Instant rollback** — drop a bad version's traffic in one
-  click; the blast radius stays capped at the canary slice.
+Temporal Worker Versioning lets you ship new worker code
+without breaking running workflows. This demo makes each
+guarantee visible on a live dashboard:
+
+- **Pinned in-flight orders** — every order keeps running on
+  the worker version it started on. Deploying or ramping a
+  new version never changes the shape of an order already in
+  flight.
+- **Canary ramp** — shift a percentage of *new* orders onto a
+  new version straight from the UI (10% → 25% → 50% → 100%),
+  then promote it to Current for a full cutover.
+- **Instant rollback** — drop a bad version's ramp in one
+  click; new orders snap back to the Current version and the
+  blast radius stays capped at the canary slice.
 - **Reset-with-move recovery** — rewind the orders stuck on a
-  bad build and re-run them on the healthy version.
-- **Live dashboard** — a responsive Pizza Tracker that paints
-  each order's progress and the worker version executing it.
+  bad build and re-run them, pinned to the healthy version,
+  from the start.
+- **Zero non-determinism** — because every version is Pinned
+  and recovery re-pins to a known-good build, no order ever
+  replays against incompatible code.
 
-## Prerequisites
+## The three versions
 
-- A running [temporal-k8s](https://github.com/alexandreroman/temporal-k8s)
-  Kind cluster (Temporal Server + Temporal Worker Controller).
-- [Go](https://go.dev/) 1.26+
-- [Task](https://taskfile.dev/)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) and
-  [Docker](https://www.docker.com/)
+A single worker image compiles all three pizza-workflow
+shapes. The `PIZZA_VERSION` env var selects which shape a pod
+registers (under the shared workflow type `PizzaOrder`); all
+shapes are **Pinned**.
 
-## Getting Started
+| Version | Pipeline                                                          | Notes                       |
+| ------- | ----------------------------------------------------------------- | --------------------------- |
+| `v1`    | Received → Cooking → Out for delivery → Delivered                 | Baseline, 4 steps.          |
+| `v2`    | Received → Cooking → Quality check → Out for delivery → Delivered | Adds a Quality check step.  |
+| `v3`    | Received → Cooking → Quality check → Drone delivery → Delivered   | Drone always fails; stalls. |
 
-```bash
-git clone https://github.com/alexandreroman/temporal-versioning-demo.git
-cd temporal-versioning-demo
-
-task build   # build the worker and backend binaries
-task test    # run the tests
-```
-
-Run the components locally against a Temporal frontend (for
-example the one exposed by `temporal-k8s`):
-
-```bash
-TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233 task run-worker
-task run-backend   # serves the Pizza Tracker on http://localhost:8080
-```
-
-Deploy to the cluster (images are pulled from ghcr.io):
-
-```bash
-kubectl apply -k k8s/
-```
-
-## Usage
-
-The Pizza Tracker dashboard drives the demo:
-
-- **Ramp / Promote** a new worker version onto live traffic.
-- **Rollback** to stop sending new orders to a bad version.
-- **Recover stuck orders** to reset the affected orders and
-  move them to the healthy version.
-
-Shipping new worker code goes through Kubernetes (change the
-image tag in the `TemporalWorkerDeployment`); traffic routing
-is driven from the UI via the Temporal API.
-
-## Configuration
-
-| Variable                    | Description                          | Default          |
-| --------------------------- | ------------------------------------ | ---------------- |
-| `TEMPORAL_ADDRESS`          | Temporal frontend gRPC address       | `localhost:7233` |
-| `TEMPORAL_DEPLOYMENT_NAME`  | Worker Deployment name (injected)    | (from controller)|
-| `TEMPORAL_WORKER_BUILD_ID`  | Worker build ID (injected)           | (from controller)|
-| `PIZZA_TASK_QUEUE`          | Task queue polled by the worker      | `pizza`          |
-| `PORT`                      | Backend HTTP listen port             | `8080`           |
-| `FRONTEND_DIR`              | Directory served as the SPA          | `frontend`       |
+`v3` is intentionally buggy: its Drone delivery activity
+always errors, so v3 orders enter a bounded retry loop, go
+red, and stall until they are recovered onto the healthy
+version.
 
 ## Architecture
 
 ```mermaid
 graph TD
     Browser["Pizza Tracker SPA"] -->|REST + SSE| Backend
-    Backend["Backend (Go): API, state poller, order generator"]
-    Backend -->|"actions + queries"| Temporal["Temporal Server"]
-    Backend -->|starts orders| Temporal
-    Controller["Temporal Worker Controller"] -->|creates / scales| Workers
-    Workers["Versioned pizza workers (v1 / v2 / v3)"] -->|poll| Temporal
+    Backend["Backend (Go)"] -->|"Describe + list/query open workflows"| Temporal
+    Backend -->|"ramp / promote / rollback / recover"| Temporal
+    Backend -->|starts orders| Temporal["Temporal Server"]
+    Controller["Temporal Worker Controller (Manual)"] -->|creates / scales / sunsets| Workers
+    Workers["Versioned pizza workers (v1 / v2 / v3)"] -->|poll PizzaOrder| Temporal
 ```
 
-| Module          | Description                                       |
-| --------------- | ------------------------------------------------- |
-| `cmd/worker`    | Versioned Temporal worker (Pinned behavior).      |
-| `cmd/backend`   | REST + SSE API, state poller and rollout actions. |
-| `internal/pizza`| Pizza workflow, activities and shared types.      |
-| `frontend`      | Single-page Pizza Tracker dashboard.              |
-| `k8s`           | Kustomize manifests for the demo deployment.      |
+- **Browser SPA** — a single-page Pizza Tracker. It receives
+  live `DashboardState` frames over **Server-Sent Events**
+  (`GET /events`) and drives rollout actions through **REST**
+  (`POST /api/ramp`, `/api/promote`, `/api/rollback`,
+  `/api/recover`).
+- **Go backend** (`cmd/backend`) — polls Temporal
+  (`DescribeWorkerDeployment` for routing config and version
+  summaries, plus lists and `getState`-queries the open
+  `PizzaOrder` workflows), serves the SPA, drives the routing
+  and recovery actions, and runs an order generator that
+  starts one order every few seconds so there is always live
+  traffic. Each worker reports its friendly version
+  (`v1`/`v2`/`v3`) and step progress through the **`getState`
+  query**, so the UI colours orders without decoding Build
+  IDs.
+- **Temporal Server + Worker Controller** — the controller
+  runs in **Manual** strategy and manages the versioned
+  worker pods. One image compiles all three workflow shapes;
+  the shape is selected per pod by the `PIZZA_VERSION` env
+  var. The controller derives a Build ID from the
+  pod-template hash, so shipping a new version is just a
+  pod-template change (new `PIZZA_VERSION` and/or image tag).
+
+Routing actions map to the Temporal API as follows: ramp →
+`SetRampingVersion`, promote → `SetCurrentVersion`, rollback →
+`SetRampingVersion` with an empty build ID (safe because a
+Current version is set), and recover → a per-order
+reset-with-move that re-pins each stuck order to the Current
+build.
+
+| Module           | Description                                          |
+| ---------------- | ---------------------------------------------------- |
+| `cmd/worker`     | Versioned Temporal worker (Pinned behaviour).        |
+| `cmd/backend`    | REST + SSE API, state poller, actions, generator.    |
+| `internal/pizza` | Pizza workflows, activities and shared types.        |
+| `internal/dashboard` | State model, poller, actions, SSE hub, server.   |
+| `frontend`       | Single-page Pizza Tracker dashboard.                 |
+| `k8s`            | Kustomize manifests for the demo deployment.         |
+
+## Prerequisites
+
+- A running [temporal-k8s](https://github.com/alexandreroman/temporal-k8s)
+  Kind cluster (Temporal Server + Temporal Worker
+  Controller).
+- [Go](https://go.dev/) 1.26+
+- [Task](https://taskfile.dev/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) and
+  [Docker](https://www.docker.com/)
+
+## Build & run
+
+```bash
+git clone https://github.com/alexandreroman/temporal-versioning-demo.git
+cd temporal-versioning-demo
+
+task build   # build the worker and backend binaries
+task test    # run the tests (go test -race -shuffle=on ./...)
+task lint    # run golangci-lint (requires golangci-lint v2)
+```
+
+Run the components locally against a reachable Temporal
+frontend (for example the one exposed by `temporal-k8s`). The
+worker also needs `PIZZA_VERSION` and the controller-injected
+deployment vars, which are absent when running outside the
+cluster — set them by hand:
+
+```bash
+TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233 \
+  PIZZA_VERSION=v1 \
+  TEMPORAL_DEPLOYMENT_NAME=default.pizza \
+  TEMPORAL_WORKER_BUILD_ID=local \
+  task run-worker
+
+TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233 \
+  task run-backend   # serves the Pizza Tracker on http://localhost:8080
+```
+
+Container images are published to ghcr.io by CI:
+
+- `ghcr.io/alexandreroman/pizza-worker`
+- `ghcr.io/alexandreroman/pizza-backend`
+
+## Deploy to the temporal-k8s cluster
+
+Apply the Kustomize manifests against the running cluster
+(images are pulled from ghcr.io):
+
+```bash
+kubectl apply -k k8s/
+```
+
+Because the Worker Controller runs in **Manual** strategy, the
+first version starts **Inactive** with no Current version, so
+no orders flow yet. Promote v1 to Current to start the order
+flow — click **Promote** in the UI, or use the CLI:
+
+```bash
+# Get the build id, then promote it:
+temporal worker deployment describe --deployment-name default.pizza
+temporal worker deployment set-current-version \
+  --deployment-name default.pizza --build-id <v1-build-id>
+```
+
+The dashboard is then available at
+<http://pizza.127-0-0-1.nip.io/>.
+
+## Demo script
+
+The on-stage flow that exercises every guarantee:
+
+1. **Steady state on v1.** Orders stream in on v1 (4 steps).
+   The KPI strip shows Current `v1`.
+2. **Ship v2.** Set `PIZZA_VERSION: v2` in
+   `k8s/workerdeployment.yaml` (optionally bump the image
+   tag) and `kubectl apply -k k8s/`. Wait for the v2 pod.
+3. **Ramp v2.** In the UI, ramp 10% → 50% → 100%, then
+   **Promote**. In-flight v1 orders keep their 4-step journey
+   (pinned); new orders show the 5-step v2 pipeline with the
+   Quality check. v1 drains and is sunset by the controller.
+4. **Ship v3 and ramp to 10%.** Set `PIZZA_VERSION: v3`,
+   apply, wait for the pod, then ramp v3 to 10%. About 10% of
+   new orders reach the Drone step, go **red** with a retry
+   count, and stall. v2 orders are unaffected.
+5. **Rollback.** Click **Rollback**. The ramp drops to 0 and
+   100% of new orders go to v2 again. The already-stuck v3
+   orders stay red — rollback caps the blast radius but does
+   not heal them.
+6. **Recover stuck orders.** Click **Recover stuck orders**.
+   Each stuck v3 order is reset-with-moved onto v2: it
+   restarts from Received, pinned to the healthy build, and
+   completes cleanly. Once none remain, v3 drains and is
+   sunset.
+
+## Caveat: CRD naming
+
+The `temporal-k8s` cluster runs Temporal Worker Controller
+chart **≥ 0.26.0**, which **renamed** the controller CRDs and
+no longer reconciles the old kinds. The manifests in `k8s/`
+therefore use:
+
+- `kind: WorkerDeployment` (not `TemporalWorkerDeployment`)
+- `kind: Connection` (not `TemporalConnection`)
+
+Both stay on API group/version `temporal.io/v1alpha1`; the
+field layout is otherwise identical. Verify what your cluster
+actually has before applying:
+
+```bash
+kubectl get crd | grep -i temporal
+```
+
+If, surprisingly, only the legacy `temporalworkerdeployments`
+CRD exists, switch the manifests back to the old kinds — the
+fields are the same.
+
+## Configuration
+
+The worker reads:
+
+| Variable                   | Description                            | Default          |
+| -------------------------- | -------------------------------------- | ---------------- |
+| `TEMPORAL_ADDRESS`         | Temporal frontend gRPC address         | `localhost:7233` |
+| `TEMPORAL_NAMESPACE`       | Temporal namespace                     | `default`        |
+| `TEMPORAL_DEPLOYMENT_NAME` | Worker Deployment name (controller)    | (required)       |
+| `TEMPORAL_WORKER_BUILD_ID` | Worker Build ID (controller)           | (required)       |
+| `PIZZA_VERSION`            | Workflow shape this pod runs (v1/v2/v3) | `v1`            |
+| `PIZZA_TASK_QUEUE`         | Task queue polled by the worker        | `pizza`          |
+
+The backend reads:
+
+| Variable                | Description                          | Default          |
+| ----------------------- | ------------------------------------ | ---------------- |
+| `TEMPORAL_ADDRESS`      | Temporal frontend gRPC address       | `localhost:7233` |
+| `TEMPORAL_NAMESPACE`    | Temporal namespace                   | `default`        |
+| `PIZZA_DEPLOYMENT_NAME` | Worker Deployment name to describe   | `default.pizza`  |
+| `PIZZA_TASK_QUEUE`      | Task queue orders are started on      | `pizza`          |
+| `PIZZA_POLL_INTERVAL`   | Temporal poll cadence                | `1s`             |
+| `PIZZA_ORDER_INTERVAL`  | New-order cadence                    | `6s`             |
+| `PORT`                  | HTTP listen port                     | `8080`           |
+| `FRONTEND_DIR`          | Directory served as the SPA          | `frontend`       |
+
+> The controller auto-injects `TEMPORAL_ADDRESS`,
+> `TEMPORAL_NAMESPACE`, `TEMPORAL_DEPLOYMENT_NAME` and
+> `TEMPORAL_WORKER_BUILD_ID` into the worker pods, so the
+> `k8s/workerdeployment.yaml` pod template only sets
+> `PIZZA_VERSION`.
 
 ## License
 
 This project is licensed under the Apache-2.0 License — see
 [LICENSE](LICENSE) for details.
+</content>
+</invoke>
