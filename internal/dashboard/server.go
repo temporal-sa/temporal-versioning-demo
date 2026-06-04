@@ -19,7 +19,7 @@ const (
 )
 
 // sseRegions are the named regions streamed to the browser on every frame.
-var sseRegions = []string{"dep", "kpis", "orders", "versions", "controls"}
+var sseRegions = []string{"kpis", "orders", "versions", "controls"}
 
 // Server exposes the dashboard API and serves the SPA.
 type Server struct {

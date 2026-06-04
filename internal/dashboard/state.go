@@ -51,10 +51,9 @@ type KPIs struct {
 
 // DashboardState is the full SSE payload.
 type DashboardState struct {
-	DeploymentName string        `json:"deploymentName"`
-	KPIs           KPIs          `json:"kpis"`
-	Orders         []Order       `json:"orders"`
-	Versions       []VersionCard `json:"versions"`
+	KPIs     KPIs          `json:"kpis"`
+	Orders   []Order       `json:"orders"`
+	Versions []VersionCard `json:"versions"`
 }
 
 // VersionSummary mirrors the fields BuildState needs from a Temporal version summary.
@@ -82,7 +81,7 @@ type LiveOrder struct {
 
 // BuildState maps Temporal data to the SPA payload. Friendly version labels are
 // assigned by CreateTime order (oldest summary = v1).
-func BuildState(deploymentName string, routing Routing, summaries []VersionSummary, orders []LiveOrder) DashboardState {
+func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder) DashboardState {
 	sorted := append([]VersionSummary(nil), summaries...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
 
@@ -136,7 +135,7 @@ func BuildState(deploymentName string, routing Routing, summaries []VersionSumma
 		RampingPct:     routing.RampingPct,
 	}
 
-	return DashboardState{DeploymentName: deploymentName, KPIs: kpi, Orders: outOrders, Versions: cards}
+	return DashboardState{KPIs: kpi, Orders: outOrders, Versions: cards}
 }
 
 func friendly(i int) string {

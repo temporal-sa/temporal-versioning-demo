@@ -31,7 +31,7 @@ func TestBuildStateLabelsByCreateTimeAndCountsPinned(t *testing.T) {
 		}},
 	}
 
-	st := dashboard.BuildState("default.pizza", routing, summaries, orders)
+	st := dashboard.BuildState(routing, summaries, orders)
 
 	if st.KPIs.InFlight != 3 {
 		t.Errorf("inFlight = %d, want 3", st.KPIs.InFlight)

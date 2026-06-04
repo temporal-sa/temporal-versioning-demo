@@ -101,10 +101,6 @@
         @apply text-[17px] font-extrabold;
       }
 
-      .top .dep {
-        @apply text-[11px] opacity-60;
-      }
-
       /* ===== KPI strip ===== */
       .kpis {
         @apply flex shrink-0 gap-px;
@@ -441,7 +437,6 @@
     <div class="app" sse-connect="/events">
       <header class="top">
         <div class="logo">🍕 Pizza Tracker</div>
-        <div class="dep">· deployment <b id="dep" sse-swap="dep">—</b></div>
       </header>
 
       <div class="kpis" id="kpis" sse-swap="kpis">

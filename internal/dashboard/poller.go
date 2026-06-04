@@ -18,18 +18,17 @@ type TemporalReader interface {
 
 // Poller periodically snapshots Temporal and publishes a DashboardState.
 type Poller struct {
-	reader         TemporalReader
-	deploymentName string
-	interval       time.Duration
-	logger         *slog.Logger
-	publish        func(DashboardState)
+	reader   TemporalReader
+	interval time.Duration
+	logger   *slog.Logger
+	publish  func(DashboardState)
 }
 
 // NewPoller builds a Poller that publishes a fresh DashboardState every interval.
-func NewPoller(r TemporalReader, deploymentName string, interval time.Duration, logger *slog.Logger,
+func NewPoller(r TemporalReader, interval time.Duration, logger *slog.Logger,
 	publish func(DashboardState),
 ) *Poller {
-	return &Poller{reader: r, deploymentName: deploymentName, interval: interval, logger: logger, publish: publish}
+	return &Poller{reader: r, interval: interval, logger: logger, publish: publish}
 }
 
 // Run polls until ctx is cancelled. On each tick it builds and publishes state;
@@ -58,5 +57,5 @@ func (p *Poller) tick(ctx context.Context) {
 		p.logger.Warn("open orders fetch failed", "err", err)
 		return
 	}
-	p.publish(BuildState(p.deploymentName, routing, summaries, orders))
+	p.publish(BuildState(routing, summaries, orders))
 }

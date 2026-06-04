@@ -50,7 +50,7 @@ func main() {
 
 	hub := dashboard.NewHub()
 	reader := dashboard.NewSDKReader(c, deploymentName, logger)
-	poller := dashboard.NewPoller(reader, deploymentName, pollInterval, logger, hub.Publish)
+	poller := dashboard.NewPoller(reader, pollInterval, logger, hub.Publish)
 	actions := dashboard.NewActions(c, deploymentName, namespace, logger)
 	// Seed startID from the wall clock so order IDs do not reset to order-1 on
 	// every restart and collide with a still-open order from the previous run.

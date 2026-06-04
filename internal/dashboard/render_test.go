@@ -30,7 +30,7 @@ func buildFixture() dashboard.DashboardState {
 			Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true, RetryCount: 2,
 		}},
 	}
-	return dashboard.BuildState("default.pizza", routing, summaries, orders)
+	return dashboard.BuildState(routing, summaries, orders)
 }
 
 func render(t *testing.T, r *dashboard.Renderer, region string, state dashboard.DashboardState) string {
@@ -53,7 +53,6 @@ func TestRendererRegions(t *testing.T) {
 		region string
 		want   []string
 	}{
-		{"dep", []string{"default.pizza"}},
 		{"kpis", []string{
 			"In flight", ">2<", // in-flight count
 			`vb b-v2`,            // current version badge color

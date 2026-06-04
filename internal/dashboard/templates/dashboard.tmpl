@@ -5,10 +5,6 @@
 <span class="vb {{versionClass .}}">{{.}}</span>
 {{- end -}}
 
-{{- define "dep" -}}
-{{- if .DeploymentName}}{{.DeploymentName}}{{else}}—{{end -}}
-{{- end -}}
-
 {{- define "kpis" -}}
 <div class="kpi">
   <div class="l">In flight</div>

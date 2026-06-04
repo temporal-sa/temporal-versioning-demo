@@ -41,7 +41,7 @@ func NewRenderer() (*Renderer, error) {
 	return &Renderer{tmpl: tmpl}, nil
 }
 
-// Region renders a single named region (dep, kpis, orders, versions, controls)
+// Region renders a single named region (kpis, orders, versions, controls)
 // to w using the given state.
 func (r *Renderer) Region(w io.Writer, name string, state DashboardState) error {
 	if err := r.tmpl.ExecuteTemplate(w, name, state); err != nil {
