@@ -57,7 +57,7 @@ rules when changing the frontend:
     scroll container** (`overflow-y-auto` + **`scrollbar-gutter: stable`**); `.olist`
     no longer scrolls and must NOT keep `flex-1` (it would collapse `#orders` to 0
     height in flow → Deployment panel overlap on stacked/mobile layouts).
-  - **Pinning**: `N = clamp(floor((W+GAP)/(MIN_COL+GAP)), 1, 3)` with `MIN_COL=360`,
+  - **Pinning**: `N = clamp(floor((W+GAP)/(MIN_COL+GAP)), 1, 2)` with `MIN_COL=360`,
     `GAP=12`. Each card stores its column in `dataset.col`, kept for life; a new card
     goes to the shortest column; a full re-pack happens **only** when `N` changes
     (resize). Relayout on `htmx:afterSettle` (per SSE morph), a `ResizeObserver` on
@@ -108,9 +108,9 @@ rules when changing the frontend:
   `.app`/`.dbody`/`.olist`/`.dright`/`.oh .nm`). `.olist` was refactored this
   way: its grid + 3-column breakpoint now live entirely in `@apply`.
 - **Dashboard layout intents to preserve when retuning widths/breakpoints:**
-  live orders render in a responsive grid (`.olist`) **capped at 3 columns at
-  ≥1500px**; the right Deployment column (`.dright`) is intentionally aligned to
-  the 3rd KPI cell ("Ramping"). **Gotcha:** a naive `2:1` flex split
+  live orders are laid out by the masonry script **capped at 2 columns**
+  (`MAX_COLS = 2`, decision 2026-06-04 — was 3); the right Deployment column
+  (`.dright`) is intentionally aligned to the 3rd KPI cell ("Ramping"). **Gotcha:** a naive `2:1` flex split
   (`.dleft { flex: 2 }` vs `.dright` `flex-1`) does NOT render as 2/3 : 1/3 —
   measured in-browser it left `.dright` ~12px too wide, so the divider missed
   the Ramping cell. The fix is to **pin `.dright` to exactly one third**
