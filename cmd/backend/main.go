@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexandreroman/temporal-versioning-demo/frontend"
 	"github.com/alexandreroman/temporal-versioning-demo/internal/dashboard"
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
 	"go.temporal.io/sdk/client"
@@ -29,9 +30,16 @@ func main() {
 	namespace := getenv("TEMPORAL_NAMESPACE", "default")
 	deploymentName := getenv("PIZZA_DEPLOYMENT_NAME", "default.pizza")
 	taskQueue := getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue)
-	frontendDir := getenv("FRONTEND_DIR", "frontend")
 	pollInterval := durEnv("PIZZA_POLL_INTERVAL", time.Second, logger)
 	orderInterval := durEnv("PIZZA_ORDER_INTERVAL", 6*time.Second, logger)
+
+	// Build the renderer before dialing Temporal so this fail-fast path has no
+	// pending defers (it only parses embedded templates, no external dependency).
+	renderer, err := dashboard.NewRenderer()
+	if err != nil {
+		logger.Error("failed to build renderer", "err", err)
+		os.Exit(1)
+	}
 
 	c, err := client.Dial(client.Options{HostPort: temporalAddress, Namespace: namespace})
 	if err != nil {
@@ -50,7 +58,7 @@ func main() {
 	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, int(time.Now().Unix()), logger)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           dashboard.NewServer(hub, actions, frontendDir, logger).Routes(),
+		Handler:           dashboard.NewServer(hub, actions, renderer, frontend.Assets, logger).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

@@ -72,11 +72,15 @@ graph TD
     Workers["Versioned pizza workers (v1 / v2 / v3)"] -->|poll PizzaOrder| Temporal
 ```
 
-- **Browser SPA** — a single-page Pizza Tracker. It receives
-  live `DashboardState` frames over **Server-Sent Events**
-  (`GET /events`) and drives rollout actions through **REST**
+- **Browser SPA** — a single-page Pizza Tracker built with
+  **HTMX** and **Tailwind CSS** (both via CDN, no build step).
+  The backend renders the dashboard server-side from each
+  `DashboardState` and pushes the HTML fragments over
+  **Server-Sent Events** (`GET /events`); HTMX swaps them into
+  the page. Rollout actions are driven through **REST**
   (`POST /api/ramp`, `/api/promote`, `/api/rollback`,
-  `/api/recover`).
+  `/api/recover`). The SPA (`index.html`) is embedded into the
+  backend binary.
 - **Go backend** (`cmd/backend`) — polls Temporal
   (`DescribeWorkerDeployment` for routing config and version
   summaries, plus lists and `getState`-queries the open
@@ -293,7 +297,6 @@ The backend reads:
 | `PIZZA_POLL_INTERVAL`   | Temporal poll cadence                | `1s`             |
 | `PIZZA_ORDER_INTERVAL`  | New-order cadence                    | `6s`             |
 | `PORT`                  | HTTP listen port                     | `8080`           |
-| `FRONTEND_DIR`          | Directory served as the SPA          | `frontend`       |
 
 > The controller auto-injects `TEMPORAL_ADDRESS`,
 > `TEMPORAL_NAMESPACE`, `TEMPORAL_DEPLOYMENT_NAME` and

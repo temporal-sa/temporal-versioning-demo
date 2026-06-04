@@ -1,0 +1,93 @@
+{{/* Pizza Tracker dashboard regions, rendered server-side and streamed over SSE.
+     html/template auto-escaping replaces the JS escapeHtml helper. */}}
+
+{{- define "badge" -}}
+<span class="vb {{versionClass .}}">{{.}}</span>
+{{- end -}}
+
+{{- define "dep" -}}
+{{- if .DeploymentName}}{{.DeploymentName}}{{else}}—{{end -}}
+{{- end -}}
+
+{{- define "kpis" -}}
+<div class="kpi">
+  <div class="l">In flight</div>
+  <div class="v">{{.KPIs.InFlight}}</div>
+</div>
+<div class="kpi">
+  <div class="l">Current</div>
+  <div class="v">{{if .KPIs.CurrentVersion}}{{template "badge" .KPIs.CurrentVersion}}{{else}}—{{end}}</div>
+</div>
+<div class="kpi">
+  <div class="l">Ramping</div>
+  <div class="v">
+    {{- if .KPIs.RampingVersion}}{{template "badge" .KPIs.RampingVersion}} <small>{{.KPIs.RampingPct}}%</small>{{else}}—{{end -}}
+  </div>
+</div>
+{{- end -}}
+
+{{- define "order" -}}
+<div class="order{{if .Failing}} fail{{end}}">
+  <div class="oh">
+    {{- template "badge" .Version -}}
+    <b>#{{.ID}}</b>
+    {{- if .Pizza}}<span class="nm">{{.Pizza}}</span>{{end -}}
+    {{- if .Failing}}<span class="retry">⟳ retry {{.RetryCount}}×</span>{{end -}}
+    <span class="el">{{elapsed .ElapsedSec}}</span>
+  </div>
+  <div class="stepper">
+    {{- range stepNodes . -}}
+    <div class="node {{.Class}}"><div class="dot">{{.Glyph}}</div><div class="lbl">{{.Label}}</div></div>
+    {{- if .HasConn}}<div class="conn{{if .ConnFill}} fill{{end}}"></div>{{end -}}
+    {{- end -}}
+  </div>
+</div>
+{{- end -}}
+
+{{- define "orders" -}}
+{{- range .Orders}}{{template "order" .}}{{end -}}
+{{- end -}}
+
+{{- define "version" -}}
+{{- /* . is a map: {Card: VersionCard, Failing: int} */ -}}
+{{- $card := .Card -}}
+<div class="ver{{if eq (printf "%s" $card.Status) "INACTIVE"}} inactive{{end}}">
+  <div class="vrow">
+    {{- template "badge" $card.Version -}}
+    {{- if eq (printf "%s" $card.Status) "CURRENT"}}<span class="chip c-cur">CURRENT</span>
+    {{- else if eq (printf "%s" $card.Status) "RAMPING"}}<span class="chip c-ramp">RAMPING {{$card.TrafficPct}}%</span>
+    {{- else if eq (printf "%s" $card.Status) "DRAINING"}}<span class="chip c-drain">DRAINING</span>
+    {{- else}}<span class="chip c-inact">INACTIVE</span>{{end -}}
+  </div>
+  <div class="bar"><span class="{{versionClass $card.Version}}" style="--bar-w:{{barWidth $card.TrafficPct}}%"></span></div>
+  {{- if gt .Failing 0}}<div class="pin warn">⚠ {{.Failing}} failing</div>
+  {{- else}}<div class="pin">🔒 {{$card.PinnedCount}}</div>{{end -}}
+</div>
+{{- end -}}
+
+{{- define "versions" -}}
+{{- $failing := failingByVersion . -}}
+{{- range .Versions -}}
+{{- template "version" (dict "Card" . "Failing" (index $failing .Version)) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "controls" -}}
+{{- /* hx-swap="none" so the 204 routing actions do not replace the buttons; the
+       next SSE frame refreshes #controls (and the active ramp highlight). Errors
+       and the recover toast target #toast. */ -}}
+<div class="ramp-row" hx-swap="none" hx-target-error="#toast">
+  {{- $pct := .KPIs.RampingPct -}}
+  <button class="btn{{if eq $pct 10}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":10}'>10%</button>
+  <button class="btn{{if eq $pct 25}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":25}'>25%</button>
+  <button class="btn{{if eq $pct 50}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":50}'>50%</button>
+  <button class="btn{{if eq $pct 100}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":100}'>100%</button>
+</div>
+<button class="btn" hx-post="/api/promote" hx-swap="none" hx-target-error="#toast">Promote</button>
+<button class="btn danger" hx-post="/api/rollback" hx-swap="none" hx-target-error="#toast">⟲ Rollback</button>
+<button class="btn" hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover stuck orders</button>
+{{- end -}}
+
+{{- define "toast" -}}
+<div class="toast show">{{.Message}}</div>
+{{- end -}}
