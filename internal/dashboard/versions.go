@@ -31,8 +31,6 @@ func decodeVersionLabel(metadata map[string]*commonpb.Payload) string {
 
 // fetchVersionLabel describes one version and decodes its pizzaVersion label.
 // Returns "" (no error) when the version has no such metadata yet.
-//
-//nolint:unused // called by the reader layer added in a subsequent task
 func fetchVersionLabel(ctx context.Context, c client.Client, deploymentName, buildID string) (string, error) {
 	h := c.WorkerDeploymentClient().GetHandle(deploymentName)
 	desc, err := h.DescribeVersion(ctx, client.WorkerDeploymentDescribeVersionOptions{BuildID: buildID})

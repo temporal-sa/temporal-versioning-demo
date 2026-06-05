@@ -29,11 +29,13 @@ type SDKReader struct {
 	c              client.Client
 	deploymentName string
 	logger         *slog.Logger
+
+	labelCache map[string]string // buildID -> pizzaVersion; immutable per build
 }
 
 // NewSDKReader builds an SDK-backed TemporalReader for the given deployment.
 func NewSDKReader(c client.Client, deploymentName string, logger *slog.Logger) *SDKReader {
-	return &SDKReader{c: c, deploymentName: deploymentName, logger: logger}
+	return &SDKReader{c: c, deploymentName: deploymentName, logger: logger, labelCache: map[string]string{}}
 }
 
 // DeploymentSnapshot reads the deployment's routing config and version summaries.
@@ -57,11 +59,22 @@ func (r *SDKReader) DeploymentSnapshot(ctx context.Context) (Routing, []VersionS
 
 	summaries := make([]VersionSummary, 0, len(resp.Info.VersionSummaries))
 	for _, s := range resp.Info.VersionSummaries {
+		buildID := s.Version.BuildID
+		labelVal, cached := r.labelCache[buildID]
+		if !cached {
+			if v, err := fetchVersionLabel(ctx, r.c, r.deploymentName, buildID); err != nil {
+				r.logger.Debug("version label fetch failed, using CreateTime fallback", "buildId", buildID, "err", err)
+			} else if v != "" {
+				r.labelCache[buildID] = v
+				labelVal = v
+			}
+		}
 		summaries = append(summaries, VersionSummary{
-			BuildID:    s.Version.BuildID,
-			CreateTime: s.CreateTime,
-			Draining:   s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDraining,
-			Drained:    s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDrained,
+			BuildID:      buildID,
+			PizzaVersion: labelVal,
+			CreateTime:   s.CreateTime,
+			Draining:     s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDraining,
+			Drained:      s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDrained,
 		})
 	}
 	return routing, summaries, nil
