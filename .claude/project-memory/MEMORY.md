@@ -12,3 +12,4 @@
 - [Workflow waits are activity-side](references/workflow-waits-activity-side.md) — no workflow.Sleep/timers; dwell simulated in activities (injectable, zero in tests); Done set before final activity.
 - [Frontend ground rules](references/frontend-rules.md) — Tailwind Play CDN (no build), styles only in index.html, server-rendered HTML over SSE, templates carry classes only, prefer native Tailwind variants.
 - [Live orders animation](references/frontend-orders-animation.md) — #orders morphs via idiomorph with stable ids; client-side pinned-column masonry (2-col cap); idiomorph must not touch style/data-* on .order; Done visible-then-collapse; layout intents.
+- [Commit message convention](references/commit-convention.md) — subjects start with an imperative action verb; no scope/type prefix (no `Frontend:`/`Fix:`/`feat:`).
