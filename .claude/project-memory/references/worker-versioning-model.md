@@ -18,11 +18,11 @@ How Worker Versioning is wired in this demo:
   (`pizzaVersion` key, via `UpdateVersionMetadata`, best-effort retry). The
   backend labels versions from that metadata (cached `DescribeVersion`), with a
   CreateTime-order fallback only when metadata is absent.
-- **Local dev can run all three versions at once.** `make dev-all` starts
+- **Local dev runs all three versions at once.** `make dev` starts
   Temporal + backend + workers v1/v2/v3 together (each `PIZZA_VERSION=vN` +
-  `TEMPORAL_WORKER_BUILD_ID=vN-local`); `make dev` (backend + v1 only) is kept.
-  This is why labels come from metadata, not CreateTime: concurrent registration
-  makes CreateTime order racy.
+  `TEMPORAL_WORKER_BUILD_ID=vN-local`); the old `dev-all` target was merged into
+  `dev` and removed. This is why labels come from metadata, not CreateTime:
+  concurrent registration makes CreateTime order racy.
 - **Manual controller; routing is UI-driven with an EXPLICIT target.** Actions
   take a friendly version label (resolved to a Build ID via the metadata labels):
   ramp = `SetRampingVersion{BuildID, Pct}`; promote = `SetCurrentVersion{BuildID}`;
@@ -36,7 +36,7 @@ How Worker Versioning is wired in this demo:
 - **Backend bootstraps the v1-labelled version, and WAITS for its metadata.**
   While Current is nil, `EnsureCurrentVersion` promotes the version whose
   *metadata* label is `v1` (`metadataLabels`, **no CreateTime fallback in
-  bootstrap**), so starting v1/v2/v3 together via `dev-all` never promotes an
+  bootstrap**), so starting v1/v2/v3 together via `dev` never promotes an
   arbitrary (oldest-registered) build. Once Current is set it leaves the
   ramp/promote/rollback flow fully manual/UI-driven. (`Ramp`/`Promote` use the
   fallback-bearing `versionIndex`; only bootstrap is metadata-strict.)

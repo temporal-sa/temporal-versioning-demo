@@ -160,27 +160,12 @@ manual — see the [Demo script](#demo-script).
 host with hot reload, ideal for iterating on code:
 
 ```bash
-make dev   # starts Temporal in Docker, then backend + worker v1 on the host
+make dev   # Temporal in Docker + backend + workers v1/v2/v3 on the host
 ```
 
-During the demo, ship the next versions by running extra
-workers in separate terminals:
-
-```bash
-make worker-v2   # ship v2
-make worker-v3   # ship v3
-```
-
-To skip the on-demand shipping and start everything at once,
-use `make dev-all`: it runs Temporal, the backend, and workers
-v1 / v2 / v3 together, so you can drive arbitrary rollouts
-(ramp / promote any version) straight from the dashboard. Use
-`make dev` (backend + v1 only) when you want to ship v2 / v3
-on stage by hand:
-
-```bash
-make dev-all   # Temporal + backend + workers v1/v2/v3 together
-```
+Because all three worker versions run at once, you can drive
+arbitrary rollouts (ramp / promote any version) straight from
+the dashboard, without starting workers on demand.
 
 The Temporal Web UI is at <http://localhost:8233> and the
 Pizza Tracker dashboard at <http://localhost:8090>, the Air
