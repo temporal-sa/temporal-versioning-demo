@@ -107,7 +107,12 @@
         background: #0e0e13;
       }
 
-      /* ===== App shell ===== */
+      /* ===== App shell =====
+         The shell (and thus the header) is full-bleed: it spans the full
+         window width with no container. Only the KPI strip and the body are
+         wrapped in a narrower, horizontally-centered max-w-5xl column (see
+         .kpis and .dbody). No horizontal padding here: the inner sections
+         supply their own px. */
       .app {
         @apply flex flex-col overflow-hidden;
         height: 100dvh;
@@ -132,9 +137,10 @@
          states: In flight | Current | Ramping | Deploy. The Ramping cell keeps
          its slot when empty (.kpi.empty hides only its label), so nothing
          shifts when a rollout starts or ends. The Deploy button is pinned to
-         the right via .kpi-act. */
+         the right via .kpi-act. Shares the same centered max-w-5xl column as
+         .dbody, so the Deploy button aligns with the Deployment column below. */
       .kpis {
-        @apply grid shrink-0 items-center gap-[14px] px-[18px] py-[14px];
+        @apply mx-auto w-full max-w-5xl grid shrink-0 items-center gap-[14px] px-[18px] py-[14px];
         grid-template-columns: 0.8fr 0.9fr 1fr 1fr;
         background: #0e0e13;
         border-bottom: 1px solid #23232c;
@@ -169,17 +175,20 @@
         color: var(--color-amber);
       }
 
-      /* ===== Body: shared 3-column grid (orders span 2 tracks, deployment 1) =====
-         Uses the same grid-cols-3 tracks as the KPI strip, so the 2/3 boundary is
-         pixel-identical. The 1px gap-px gaps over the #23232c background draw the
-         divider line, continuous with and aligned to the KPI strip's divider. */
+      /* ===== Body: two flex columns =====
+         Centered in the narrower max-w-5xl column shared with the KPI strip.
+         A flex row: a flexible orders column (.dleft) that takes all remaining
+         width, and a fixed 360px deployment column (.dright). The vertical
+         divider is a 1px border-left on .dright (each column paints its own
+         #0e0e13 background). At this container width the orders masonry settles
+         to a single column. Stacks vertically on mobile. */
       .dbody {
-        @apply grid grid-cols-3 grid-rows-1 min-h-0 flex-1 gap-px max-[760px]:grid-cols-1 max-[760px]:grid-rows-none;
-        background: #23232c;
+        @apply mx-auto w-full max-w-5xl flex min-h-0 flex-1 max-[760px]:flex-col;
       }
 
       .dleft {
-        @apply col-span-2 flex min-w-0 min-h-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:col-span-1 max-[760px]:overflow-visible;
+        /* Flexible column: takes all remaining horizontal space (~2/3). */
+        @apply flex-1 flex min-w-0 min-h-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:overflow-visible;
         background: #0e0e13;
         /* Always reserve the scrollbar gutter so the masonry columns don't shift
            left when the scrollbar toggles as orders are added/removed. Inert on
@@ -188,10 +197,12 @@
       }
 
       .dright {
-        /* Occupies the 3rd grid track (auto-placed after .dleft's 2-track span).
-           Because .dbody shares the KPI strip's grid-cols-3 tracks, this column's
-           left edge aligns with the "Ramping" KPI cell by construction. */
-        @apply min-w-0 min-h-0 overflow-y-auto px-[18px] py-4 max-[760px]:overflow-visible;
+        /* Fixed-width column: 360px, never grows or shrinks (matches the Deploy
+           modal width and the masonry MIN_COL). The border-left draws the
+           continuous vertical divider between orders and deployment; dropped on
+           mobile, where the column is full-width and stacks below the orders. */
+        @apply w-[360px] shrink-0 min-w-0 min-h-0 overflow-y-auto border-l border-[#23232c] px-[18px]
+          py-4 max-[760px]:w-auto max-[760px]:border-l-0 max-[760px]:overflow-visible;
         background: #0e0e13;
         /* Always reserve the scrollbar gutter so the column doesn't shift when
            the scrollbar toggles. */
