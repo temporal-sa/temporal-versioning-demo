@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,7 +47,23 @@ type Actions struct {
 	deploymentName string
 	namespace      string
 	logger         *slog.Logger
+	mu             sync.Mutex        // guards labelCache
 	labelCache     map[string]string // buildID -> pizzaVersion
+}
+
+// cachedLabel returns the cached pizzaVersion label for a build, if known.
+func (a *Actions) cachedLabel(buildID string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	v, ok := a.labelCache[buildID]
+	return v, ok
+}
+
+// cacheLabel stores a resolved (non-empty) label for a build.
+func (a *Actions) cacheLabel(buildID, label string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.labelCache[buildID] = label
 }
 
 // NewActions builds an Actions over the given client and deployment.
@@ -105,7 +122,9 @@ func (a *Actions) Promote(ctx context.Context, version string) error {
 
 // versionIndex resolves the live label↔Build ID mapping (metadata-first, with a
 // CreateTime fallback) plus the current/ramping Build IDs.
-func (a *Actions) versionIndex(ctx context.Context) (labelToBuild, buildToLabel map[string]string, current, ramping string, err error) {
+func (a *Actions) versionIndex(ctx context.Context) (
+	labelToBuild, buildToLabel map[string]string, current, ramping string, err error,
+) {
 	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
 	resp, err := h.Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
@@ -126,10 +145,10 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild, buildToLabel 
 	buildToLabel = map[string]string{}
 	for i, s := range sorted {
 		buildID := s.Version.BuildID
-		labelVal, cached := a.labelCache[buildID]
+		labelVal, cached := a.cachedLabel(buildID)
 		if !cached {
 			if v, ferr := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); ferr == nil && v != "" {
-				a.labelCache[buildID] = v
+				a.cacheLabel(buildID, v)
 				labelVal = v
 			}
 		}
@@ -158,10 +177,10 @@ func (a *Actions) metadataLabels(ctx context.Context) (buildToLabel map[string]s
 	buildToLabel = map[string]string{}
 	for _, s := range resp.Info.VersionSummaries {
 		buildID := s.Version.BuildID
-		label, cached := a.labelCache[buildID]
+		label, cached := a.cachedLabel(buildID)
 		if !cached {
 			if v, ferr := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); ferr == nil && v != "" {
-				a.labelCache[buildID] = v
+				a.cacheLabel(buildID, v)
 				label = v
 			}
 		}
@@ -196,7 +215,7 @@ const (
 	bootstrapWait
 )
 
-// decideBootstrap maps the result of targetAndCurrent to a startup action. It is
+// decideBootstrap maps a resolved (target, current) pair to a startup action. It is
 // pure (no I/O) so the bootstrap rules can be unit-tested in isolation.
 //
 // Rules:

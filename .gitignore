@@ -1,6 +1,8 @@
 # Build output
 /bin/
 /tmp/
+/worker
+/backend
 *.test
 *.out
 

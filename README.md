@@ -147,9 +147,12 @@ Compose, so no `temporal-k8s` cluster is required.
 
 In both cases the Worker Controller and its **Manual**
 strategy are not in play locally. The backend handles the
-bootstrap instead: on startup it **auto-promotes the first
-registered version to Current** (only when none is set yet),
-so orders start flowing on v1 without any manual step.
+bootstrap instead: on startup it promotes the version a worker
+has labelled **v1** in its Worker Deployment Version metadata,
+and **waits** for that metadata before promoting (only when no
+Current is set yet). Because it keys off the published label,
+starting v1 / v2 / v3 together never promotes an arbitrary
+build — orders always start flowing on v1, with no manual step.
 Shipping and routing the later versions (v2 / v3) stays
 manual — see the [Demo script](#demo-script).
 
@@ -166,6 +169,17 @@ workers in separate terminals:
 ```bash
 make worker-v2   # ship v2
 make worker-v3   # ship v3
+```
+
+To skip the on-demand shipping and start everything at once,
+use `make dev-all`: it runs Temporal, the backend, and workers
+v1 / v2 / v3 together, so you can drive arbitrary rollouts
+(ramp / promote any version) straight from the dashboard. Use
+`make dev` (backend + v1 only) when you want to ship v2 / v3
+on stage by hand:
+
+```bash
+make dev-all   # Temporal + backend + workers v1/v2/v3 together
 ```
 
 The Temporal Web UI is at <http://localhost:8233> and the
@@ -217,12 +231,15 @@ the host environment unchanged.
 
 The Worker Controller runs in **Manual** strategy, so it never
 sets a Current version on its own. The backend bootstraps the
-first version instead: on startup it **auto-promotes the first
-registered version to Current** (only when none is set yet),
-so orders start flowing on v1 as soon as the worker registers
-— no manual promote needed for the first version. Routing the
-later versions (ramp / promote / rollback of v2 / v3) stays
-manual, driven from the UI.
+first version instead: on startup it promotes the version a
+worker has labelled **v1** in its Worker Deployment Version
+metadata, and **waits** for that metadata before promoting
+(only when no Current is set yet). Keying off the published
+label means starting v1 / v2 / v3 together never promotes an
+arbitrary build — orders start flowing on v1 as soon as its
+worker registers, with no manual promote. Routing the later
+versions (ramp / promote / rollback of v2 / v3) stays manual,
+driven from the UI.
 
 If you ever need to set the Current version by hand (e.g. to
 recover), use the **Promote** button in the UI or the CLI:
@@ -240,6 +257,13 @@ The dashboard is then available at
 ## Demo script
 
 The on-stage flow that exercises every guarantee:
+
+> Ramp, promote and rollback are now driven from the **Deploy**
+> modal: pick the target version with the radio buttons and move
+> the 4-stop **10 / 25 / 50 / 100%** slider; reaching 100%
+> promotes that version to Current. Rollback drops the ramp from
+> the same modal. The KPI band shows the Current version plus
+> the active Ramping target and percentage.
 
 1. **Steady state on v1.** Orders stream in on v1 (4 steps).
    The KPI strip shows Current `v1`.

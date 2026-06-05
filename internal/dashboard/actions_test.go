@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -68,4 +70,21 @@ func TestBootstrapBuildIDPicksV1(t *testing.T) {
 	if got := bootstrapBuildID(map[string]string{"bX": "v2"}); got != "" {
 		t.Errorf("no v1 present = %q, want \"\"", got)
 	}
+}
+
+// TestActionsLabelCacheConcurrent hammers the labelCache helpers from many
+// goroutines so `go test -race` flags any regression that drops the mutex guard.
+func TestActionsLabelCacheConcurrent(t *testing.T) {
+	a := &Actions{labelCache: map[string]string{}}
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			id := fmt.Sprintf("b%d", n%5)
+			a.cacheLabel(id, "v1")
+			_, _ = a.cachedLabel(id)
+		}(i)
+	}
+	wg.Wait()
 }
