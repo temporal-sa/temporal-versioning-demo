@@ -56,9 +56,10 @@ shapes are **Pinned**.
 | `v3`    | Received → Cooking → Quality check → Drone delivery → Delivered   | Drone always fails; stalls. |
 
 `v3` is intentionally buggy: its Drone delivery activity
-always errors, so v3 orders enter a bounded retry loop, go
-red, and stall until they are recovered onto the healthy
-version.
+always errors, so v3 orders retry forever via Temporal's
+native durable retry, go red, and stall (Running) until they
+are recovered onto the healthy version — they never
+fail/complete.
 
 ## Architecture
 

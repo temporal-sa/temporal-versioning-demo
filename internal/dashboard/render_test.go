@@ -27,7 +27,7 @@ func buildFixture() dashboard.DashboardState {
 		}},
 		{WorkflowID: "order-2", BuildID: "b3", ElapsedSec: 130, State: pizza.OrderState{
 			Version: "v3", Pizza: "Diavola",
-			Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true, RetryCount: 2,
+			Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true,
 		}},
 	}
 	return dashboard.BuildState(routing, summaries, orders)
@@ -64,8 +64,7 @@ func TestRendererRegions(t *testing.T) {
 			"Pepperoni", "Diavola",
 			`vb b-v2`, `vb b-v3`,
 			"1:12",               // order-1 elapsed (72s)
-			"⟳ retry 2×",         // failing marker
-			`class="order fail"`, // failing card styling
+			`class="order fail"`, // failing card styling (the red card is the failing cue)
 			`node err`,           // errored stepper node
 		}},
 		{"versions", []string{

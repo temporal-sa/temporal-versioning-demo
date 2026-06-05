@@ -23,7 +23,7 @@ func TestBuildStateLabelsByCreateTimeAndCountsPinned(t *testing.T) {
 		}},
 		{WorkflowID: "order-2", BuildID: "b3", State: pizza.OrderState{
 			Version: "v3", Pizza: "Diavola",
-			Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true, RetryCount: 2,
+			Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true,
 		}},
 		{WorkflowID: "order-3", BuildID: "b2", State: pizza.OrderState{
 			Version: "v2", Pizza: "Marinara",

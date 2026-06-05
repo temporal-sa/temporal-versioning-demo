@@ -19,10 +19,8 @@ const StepDwell = 15 * time.Second
 // before the workflow completes and the card's node is removed.
 const DeliveredDwell = 7 * time.Second
 
-const maxDroneRetries = 100 // bounded so a stuck v3 order can't bloat history forever
-
 // droneAttempt is how long each (failing) drone delivery attempt takes; it paces the
-// v3 retry loop from the activity side so no workflow timer is needed.
+// v3 retry cadence from the activity side so no workflow timer is needed.
 const droneAttempt = 5 * time.Second
 
 // PizzaOrderV1 runs the 4-step baseline pipeline.
@@ -54,8 +52,14 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: StepDwell + 15*time.Second,
-		// Fail fast: the workflow owns the retry loop so it can surface RetryCount.
-		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1},
+		// Activities now lean on Temporal's native durable retry with no attempt limit
+		// (MaximumAttempts: 0 == retry forever). A permanently-broken step — the v3 drone —
+		// therefore keeps retrying indefinitely, so the order stays red/Running and never
+		// fails/completes. With InitialInterval (1s) and BackoffCoefficient (2.0) left at
+		// their defaults, the per-retry interval starts at 1s and doubles (1s→2s→4s→...),
+		// but MaximumInterval caps it at droneAttempt so it never backs off to the SDK
+		// default maximum (~100s) — keeping the retry cadence lively for the demo.
+		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 0, MaximumInterval: droneAttempt},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	var a Activities
@@ -82,7 +86,12 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 				return err
 			}
 		case StepDroneDelivery:
-			if err := runDrone(ctx, state, a, in); err != nil {
+			// The v3 drone is deterministically broken, so mark the order failing as it
+			// enters this step. With unlimited native retry this .Get blocks until the
+			// activity succeeds (it never does) or the workflow is cancelled, so the order
+			// stalls red/Running forever — that is intended.
+			state.Failing = true
+			if err := workflow.ExecuteActivity(ctx, a.DroneDelivery, in).Get(ctx, nil); err != nil {
 				return err
 			}
 		case StepDelivered:
@@ -98,23 +107,6 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 	}
 
 	return nil
-}
-
-// runDrone is the buggy v3 step: it retries the failing drone activity, surfacing
-// the attempt count and failing flag through the query, until it gives up.
-func runDrone(ctx workflow.Context, state *OrderState, a Activities, in OrderInput) error {
-	var lastErr error
-	for attempt := 1; attempt <= maxDroneRetries; attempt++ {
-		err := workflow.ExecuteActivity(ctx, a.DroneDelivery, in).Get(ctx, nil)
-		if err == nil {
-			state.Failing = false
-			return nil
-		}
-		lastErr = err
-		state.Failing = true
-		state.RetryCount = attempt
-	}
-	return lastErr
 }
 
 // Register registers the workflow implementation for the given version (under the

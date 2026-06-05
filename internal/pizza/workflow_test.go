@@ -1,9 +1,12 @@
 package pizza_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 )
 
@@ -43,33 +46,54 @@ func TestV3StallsOnDrone(t *testing.T) {
 	env := ts.NewTestWorkflowEnvironment()
 	env.RegisterActivity(&pizza.Activities{})
 
+	// v3 stalls on the always-failing drone. With native unlimited retry the drone
+	// activity is retried forever, so the workflow never completes — it stays Running,
+	// marked failing. We therefore inspect the stalled state once the retry loop is
+	// observed and then cancel, rather than running to completion (which would hang).
+	//
+	// Waiting for the *second* DroneDelivery start is the deterministic signal: it
+	// proves the first attempt already failed and the durable retry is under way, so
+	// the workflow is genuinely stalled on the drone step. A fixed mock-clock delay is
+	// not reliable here — with zero activity dwells the clock barely advances and the
+	// callback can fire before the workflow reaches the drone.
+	droneStarts := 0
+	asserted := false
+	env.SetOnActivityStartedListener(
+		func(info *activity.Info, _ context.Context, _ converter.EncodedValues) {
+			if info.ActivityType.Name != "DroneDelivery" {
+				return
+			}
+			droneStarts++
+			if droneStarts < 2 || asserted {
+				return
+			}
+			asserted = true
+
+			val, err := env.QueryWorkflow(pizza.GetStateQuery)
+			if err != nil {
+				t.Errorf("query failed: %v", err)
+				return
+			}
+			var st pizza.OrderState
+			if err := val.Get(&st); err != nil {
+				t.Errorf("decode state: %v", err)
+				return
+			}
+			if st.Version != "v3" {
+				t.Errorf("expected version v3, got %q", st.Version)
+			}
+			if !st.Failing {
+				t.Errorf("expected drone step to be failing, got %+v", st)
+			}
+			if st.Done {
+				t.Errorf("v3 should never complete, got Done=true")
+			}
+			if st.Steps[st.CurrentStep] != pizza.StepDroneDelivery {
+				t.Errorf("expected current step Drone, got %v", st.Steps[st.CurrentStep])
+			}
+			// Release the blocked drone .Get so the test ends instead of hanging.
+			env.CancelWorkflow()
+		})
+
 	env.ExecuteWorkflow(pizza.PizzaOrderV3, pizza.OrderInput{OrderID: 3, Pizza: "Diavola"})
-
-	// v3 stalls on the always-failing drone: the bounded retry loop runs out and the
-	// workflow ultimately finishes with an error. No workflow timers are involved —
-	// each attempt is paced by the DroneDelivery activity itself.
-	if !env.IsWorkflowCompleted() {
-		t.Fatal("workflow did not complete")
-	}
-	if err := env.GetWorkflowError(); err == nil {
-		t.Fatal("v3 should ultimately error on drone delivery")
-	}
-
-	// The final state surfaces the stall: stuck on the drone step, marked failing,
-	// with the retry count recorded.
-	val, err := env.QueryWorkflow(pizza.GetStateQuery)
-	if err != nil {
-		t.Fatalf("query failed: %v", err)
-	}
-	var st pizza.OrderState
-	_ = val.Get(&st)
-	if st.Version != "v3" {
-		t.Errorf("expected version v3, got %q", st.Version)
-	}
-	if !st.Failing || st.RetryCount < 1 {
-		t.Errorf("expected drone step to be failing with retries, got %+v", st)
-	}
-	if st.Steps[st.CurrentStep] != pizza.StepDroneDelivery {
-		t.Errorf("expected current step Drone, got %v", st.Steps[st.CurrentStep])
-	}
 }

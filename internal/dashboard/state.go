@@ -28,7 +28,6 @@ type Order struct {
 	Steps       []pizza.StepLabel `json:"steps"`
 	CurrentStep int               `json:"currentStep"`
 	Failing     bool              `json:"failing"`
-	RetryCount  int               `json:"retryCount"`
 	Done        bool              `json:"done"`
 	ElapsedSec  int               `json:"elapsedSec"`
 }
@@ -112,7 +111,6 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 			Steps:       o.State.Steps,
 			CurrentStep: o.State.CurrentStep,
 			Failing:     o.State.Failing,
-			RetryCount:  o.State.RetryCount,
 			Done:        o.State.Done,
 			ElapsedSec:  o.ElapsedSec,
 		})

@@ -44,5 +44,4 @@ type OrderState struct {
 	CurrentStep int         `json:"currentStep"` // index into Steps of the in-progress step
 	Done        bool        `json:"done"`        // workflow finished all steps
 	Failing     bool        `json:"failing"`     // current step is erroring/retrying
-	RetryCount  int         `json:"retryCount"`  // attempts on the failing step
 }

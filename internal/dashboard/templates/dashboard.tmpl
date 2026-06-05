@@ -31,7 +31,6 @@
     {{- template "badge" .Version -}}
     <b>#{{.ID}}</b>
     {{- if .Pizza}}<span class="nm">{{.Pizza}}</span>{{end -}}
-    {{- if .Failing}}<span class="retry">⟳ retry {{.RetryCount}}×</span>{{end -}}
     <span class="el">{{elapsed .ElapsedSec}}</span>
   </div>
   <div class="stepper" style="{{stepperStyle .}}">
