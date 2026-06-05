@@ -2,7 +2,7 @@
 
 # Local-dev overlay: loaded only for dev/test targets so cluster targets
 # (deploy/teardown) run against the host environment unchanged.
-DEV_TARGETS := dev backend worker worker-v2 worker-v3 \
+DEV_TARGETS := dev dev-all backend worker worker-v2 worker-v3 \
                app-up app-worker-v2 app-worker-v3 app-down app-logs \
                infra-up infra-down infra-logs \
                test check
@@ -50,6 +50,18 @@ dev: infra-up dev-stop ## Start Temporal + backend + worker v1; open http://loca
 	@trap 'kill 0' EXIT INT TERM HUP; \
 		( $(MAKE) backend; kill 0 ) & \
 		( $(MAKE) worker; kill 0 ) & \
+		wait
+
+.PHONY: dev-all
+dev-all: infra-up dev-stop ## Start Temporal + backend + workers v1/v2/v3 together; open http://localhost:8090
+	# Like `dev`, but runs all three worker versions at once so you can drive
+	# arbitrary rollouts (ramp/promote any version) from the dashboard without
+	# starting workers on demand. dev-stop pre-flight reclaims ports/orphans.
+	@trap 'kill 0' EXIT INT TERM HUP; \
+		( $(MAKE) backend; kill 0 ) & \
+		( $(WORKER_ENV) PIZZA_VERSION=v1 TEMPORAL_WORKER_BUILD_ID=v1-local go run ./cmd/worker; kill 0 ) & \
+		( $(WORKER_ENV) PIZZA_VERSION=v2 TEMPORAL_WORKER_BUILD_ID=v2-local go run ./cmd/worker; kill 0 ) & \
+		( $(WORKER_ENV) PIZZA_VERSION=v3 TEMPORAL_WORKER_BUILD_ID=v3-local go run ./cmd/worker; kill 0 ) & \
 		wait
 
 .PHONY: dev-stop
