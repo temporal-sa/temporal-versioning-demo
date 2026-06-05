@@ -142,6 +142,36 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild, buildToLabel 
 	return labelToBuild, buildToLabel, current, ramping, nil
 }
 
+// metadataLabels resolves a buildID→label map using version metadata only (no
+// CreateTime fallback) plus the current Build ID. Bootstrap uses this so it waits
+// for a worker to actually publish pizzaVersion=v1 instead of promoting an
+// arbitrary (oldest-registered) build when all versions start together.
+func (a *Actions) metadataLabels(ctx context.Context) (buildToLabel map[string]string, current string, err error) {
+	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+	resp, err := h.Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+	}
+	if rc := resp.Info.RoutingConfig; rc.CurrentVersion != nil {
+		current = rc.CurrentVersion.BuildID
+	}
+	buildToLabel = map[string]string{}
+	for _, s := range resp.Info.VersionSummaries {
+		buildID := s.Version.BuildID
+		label, cached := a.labelCache[buildID]
+		if !cached {
+			if v, ferr := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); ferr == nil && v != "" {
+				a.labelCache[buildID] = v
+				label = v
+			}
+		}
+		if label != "" {
+			buildToLabel[buildID] = label
+		}
+	}
+	return buildToLabel, current, nil
+}
+
 // bootstrapBuildID returns the Build ID labelled v1 from a buildID→label map,
 // or "" if no version carries the v1 label yet.
 func bootstrapBuildID(buildToLabel map[string]string) string {
@@ -185,8 +215,9 @@ func decideBootstrap(target, current string, err error) (bootstrapDecision, stri
 }
 
 // EnsureCurrentVersion makes sure the deployment has a Current version at startup
-// by promoting the v1-labelled version (metadata-first, CreateTime fallback) when
-// none is set.
+// by promoting the version a worker has labelled v1 in its metadata, once that
+// label is published (it waits — no CreateTime fallback here — so concurrently
+// started v1/v2/v3 workers cannot cause an arbitrary version to be promoted).
 //
 // It runs everywhere (local and K8s) with no feature flag. Because it fires only
 // while Current is nil, it acts once at bootstrap and then leaves later
@@ -201,7 +232,7 @@ func (a *Actions) EnsureCurrentVersion(ctx context.Context, pollInterval time.Du
 	defer ticker.Stop()
 
 	for {
-		_, buildToLabel, current, _, err := a.versionIndex(ctx)
+		buildToLabel, current, err := a.metadataLabels(ctx)
 		target := bootstrapBuildID(buildToLabel)
 		switch decision, buildID := decideBootstrap(target, current, err); decision {
 		case bootstrapSkip:
