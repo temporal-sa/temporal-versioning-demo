@@ -127,16 +127,26 @@
         @apply shrink-0;
       }
 
-      /* ===== KPI strip ===== */
+      /* ===== KPI band =====
+         A STABLE 4-column grid that never reflows between the idle and ramping
+         states: In flight | Current | Ramping | Deploy. The Ramping cell keeps
+         its slot when empty (.kpi.empty hides only its label), so nothing
+         shifts when a rollout starts or ends. The Deploy button is pinned to
+         the right via .kpi-act. */
       .kpis {
-        @apply grid grid-cols-3 shrink-0 gap-px;
-        background: #23232c;
+        @apply grid shrink-0 items-center gap-[14px] px-[18px] py-[14px];
+        grid-template-columns: 0.8fr 0.9fr 1fr 1fr;
+        background: #0e0e13;
         border-bottom: 1px solid #23232c;
       }
 
       .kpi {
-        @apply px-[18px] py-[11px];
-        background: #0e0e13;
+        @apply flex flex-col gap-[7px];
+        min-height: 48px;
+      }
+
+      .kpi.empty .l {
+        visibility: hidden;
       }
 
       .kpi .l {
@@ -145,11 +155,18 @@
       }
 
       .kpi .v {
-        @apply mt-[3px] text-[17px] font-bold;
+        @apply flex items-center gap-2 text-[17px] font-bold;
       }
 
-      .kpi .v small {
-        @apply text-[11px] opacity-60;
+      .kpi-act {
+        @apply justify-self-end;
+      }
+
+      /* Read-only ramp percentage shown next to the badge in the band and as the
+         live value in the Deploy modal. Uses the amber ramping accent. */
+      .pct {
+        @apply font-extrabold;
+        color: var(--color-amber);
       }
 
       /* ===== Body: shared 3-column grid (orders span 2 tracks, deployment 1) =====
@@ -540,6 +557,16 @@
         background: #991b1b;
       }
 
+      .btn.primary {
+        background: var(--color-blue);
+        border-color: #3b82f6;
+        color: #fff;
+      }
+
+      .btn.primary:hover:not(:disabled) {
+        background: #1d4ed8;
+      }
+
       /* ===== Toast ===== */
       .toast {
         @apply fixed bottom-[18px] left-1/2 z-10 -translate-x-1/2 rounded-[9px] px-4 py-2.5 text-[12px] font-semibold;
@@ -555,6 +582,78 @@
       .toast.show {
         opacity: 1;
         animation: toast-out 4s ease forwards;
+      }
+
+      /* ===== Deploy modal ===== */
+      .modal-scrim {
+        @apply fixed inset-0 z-50 flex items-center justify-center;
+        background: rgba(4, 4, 8, 0.6);
+      }
+
+      .modal-scrim[hidden] {
+        display: none;
+      }
+
+      .modal {
+        @apply rounded-2xl p-5;
+        width: 360px;
+        background: #15151d;
+        border: 1px solid #2c2c38;
+      }
+
+      .modal h3 {
+        @apply m-0 mb-1 text-[17px] font-extrabold;
+      }
+
+      .modal-sub,
+      .modal-note {
+        @apply text-[12px];
+        color: #9aa;
+      }
+
+      .modal .lbl {
+        @apply mt-[14px] mb-2 flex justify-between text-[11px] uppercase;
+        letter-spacing: 0.06em;
+        color: #8a8a99;
+      }
+
+      .radios {
+        @apply flex gap-[9px];
+      }
+
+      .radio {
+        @apply flex-1 cursor-pointer rounded-[10px] py-[10px] text-center;
+        border: 1px solid #2c2c38;
+        background: #1b1b24;
+      }
+
+      .radio:has(input:checked) {
+        border-color: #3b82f6;
+        background: #1d2944;
+      }
+
+      .radio input {
+        display: none;
+      }
+
+      /* Modal range input: 4 reachable stops (10/25/50/100) via min=0 max=3.
+         Named distinctly from .stepper (the order-card progress bar). */
+      .stepper-range {
+        @apply w-full;
+        accent-color: var(--color-amber);
+      }
+
+      .scale {
+        @apply flex justify-between text-[11px] font-bold;
+        color: #9aa;
+      }
+
+      .modal-acts {
+        @apply mt-[18px] flex gap-[9px];
+      }
+
+      .modal-acts .btn {
+        @apply flex-1;
       }
     </style>
   </head>
@@ -591,9 +690,12 @@
           <div class="l">Current</div>
           <div class="v">—</div>
         </div>
-        <div class="kpi">
+        <div class="kpi empty">
           <div class="l">Ramping</div>
-          <div class="v">—</div>
+          <div class="v">&nbsp;</div>
+        </div>
+        <div class="kpi-act">
+          <button class="btn primary" type="button" onclick="openDeploy()">⟳ Deploy</button>
         </div>
       </div>
 
@@ -608,23 +710,51 @@
           <div id="versions" sse-swap="versions"></div>
 
           <div class="controls" id="controls" sse-swap="controls">
-            <div class="ramp-row">
-              <button class="btn">10%</button>
-              <button class="btn">25%</button>
-              <button class="btn">50%</button>
-              <button class="btn">100%</button>
-            </div>
-            <button class="btn">Promote</button>
-            <button class="btn danger">⟲ Rollback</button>
             <button class="btn">Recover stuck orders</button>
           </div>
         </aside>
       </div>
     </div>
 
+    <!-- Deploy modal: the single interactive rollout control surface. It is
+         STATIC (outside every sse-swap region) so SSE frames never re-render or
+         close it. Its actions POST via fetch (see the deploy script below), not
+         htmx, and any error fragment is shown in #toast. -->
+    <div id="deploy-modal" class="modal-scrim" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Deploy a version">
+        <h3>Deploy</h3>
+        <p class="modal-sub">Choose the target version and traffic percentage.</p>
+        <div class="lbl">Target version</div>
+        <div class="radios">
+          <label class="radio">
+            <input type="radio" name="deploy-version" value="v1" checked />
+            <span class="vb b-v1">v1</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="deploy-version" value="v2" />
+            <span class="vb b-v2">v2</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="deploy-version" value="v3" />
+            <span class="vb b-v3">v3</span>
+          </label>
+        </div>
+        <div class="lbl">Ramping <span id="deploy-pct" class="pct">10%</span></div>
+        <input id="deploy-slider" class="stepper-range" type="range" min="0" max="3" step="1" value="0"
+               oninput="onRampSlide(this.value)" />
+        <div class="scale"><b>10</b><b>25</b><b>50</b><b>100</b></div>
+        <p class="modal-note">At 100% this promotes the version to Current.</p>
+        <div class="modal-acts">
+          <button class="btn danger" type="button" onclick="rollbackDeploy()">⟲ Rollback</button>
+          <button class="btn" type="button" onclick="closeDeploy()">Cancel</button>
+          <button class="btn primary" type="button" onclick="applyDeploy()">Apply</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Action results and errors are swapped here as toast fragments. The
-         POST buttons live in #controls; their error responses target #toast
-         via the response-targets extension. -->
+         Recover button lives in #controls; the Deploy modal posts via fetch.
+         Both surface error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
 
     <!-- Client-side masonry layout for the live order cards.
@@ -808,6 +938,74 @@
         // Initial layout, and once more after htmx settles the shell.
         document.addEventListener("DOMContentLoaded", layout);
         document.body.addEventListener("htmx:afterSettle", scheduleLayout, { once: true });
+      })();
+    </script>
+
+    <!-- Deploy modal behavior.
+
+         The modal is static markup (outside every sse-swap region), so SSE
+         frames never touch it. Its actions POST via fetch rather than htmx:
+           - Apply at 100% -> /api/promote (version), otherwise -> /api/ramp.
+           - Rollback     -> /api/rollback.
+         On success the modal closes; on error the response body (a toast HTML
+         fragment) is shown in #toast. The slider snaps to 4 reachable stops. -->
+    <script>
+      (function () {
+        "use strict";
+
+        var STOPS = [10, 25, 50, 100];
+
+        function modal() {
+          return document.getElementById("deploy-modal");
+        }
+
+        window.openDeploy = function () {
+          var m = modal();
+          if (m) m.hidden = false;
+        };
+
+        window.closeDeploy = function () {
+          var m = modal();
+          if (m) m.hidden = true;
+        };
+
+        window.onRampSlide = function (idx) {
+          var pct = STOPS[parseInt(idx, 10)] || 10;
+          var out = document.getElementById("deploy-pct");
+          if (out) out.textContent = pct + "%";
+        };
+
+        function showToast(html) {
+          var t = document.getElementById("toast");
+          if (t) t.innerHTML = html;
+        }
+
+        function post(url, body) {
+          return fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body,
+          }).then(function (r) {
+            if (!r.ok) return r.text().then(showToast);
+            window.closeDeploy();
+          });
+        }
+
+        window.applyDeploy = function () {
+          var v = document.querySelector('input[name="deploy-version"]:checked');
+          var s = document.getElementById("deploy-slider");
+          if (!v || !s) return;
+          var pct = STOPS[parseInt(s.value, 10)] || 10;
+          if (pct === 100) {
+            post("/api/promote", "version=" + encodeURIComponent(v.value));
+          } else {
+            post("/api/ramp", "version=" + encodeURIComponent(v.value) + "&percentage=" + pct);
+          }
+        };
+
+        window.rollbackDeploy = function () {
+          post("/api/rollback", "");
+        };
       })();
     </script>
   </body>

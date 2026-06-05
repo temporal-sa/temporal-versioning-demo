@@ -14,11 +14,14 @@
   <div class="l">Current</div>
   <div class="v">{{if .KPIs.CurrentVersion}}{{template "badge" .KPIs.CurrentVersion}}{{else}}—{{end}}</div>
 </div>
-<div class="kpi">
+<div class="kpi{{if not .KPIs.RampingVersion}} empty{{end}}">
   <div class="l">Ramping</div>
   <div class="v">
-    {{- if .KPIs.RampingVersion}}{{template "badge" .KPIs.RampingVersion}} <small>{{.KPIs.RampingPct}}%</small>{{else}}—{{end -}}
+    {{- if .KPIs.RampingVersion}}{{template "badge" .KPIs.RampingVersion}} <span class="pct">{{.KPIs.RampingPct}}%</span>{{else}}&nbsp;{{end -}}
   </div>
+</div>
+<div class="kpi-act">
+  <button class="btn primary" type="button" onclick="openDeploy()">⟳ Deploy</button>
 </div>
 {{- end -}}
 
@@ -68,18 +71,9 @@
 {{- end -}}
 
 {{- define "controls" -}}
-{{- /* hx-swap="none" so the 204 routing actions do not replace the buttons; the
-       next SSE frame refreshes #controls (and the active ramp highlight). Errors
-       and the recover toast target #toast. */ -}}
-<div class="ramp-row" hx-swap="none" hx-target-error="#toast">
-  {{- $pct := .KPIs.RampingPct -}}
-  <button class="btn{{if eq $pct 10}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":10}'>10%</button>
-  <button class="btn{{if eq $pct 25}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":25}'>25%</button>
-  <button class="btn{{if eq $pct 50}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":50}'>50%</button>
-  <button class="btn{{if eq $pct 100}} active{{end}}" hx-post="/api/ramp" hx-vals='{"percentage":100}'>100%</button>
-</div>
-<button class="btn" hx-post="/api/promote" hx-swap="none" hx-target-error="#toast">Promote</button>
-<button class="btn danger" hx-post="/api/rollback" hx-swap="none" hx-target-error="#toast">⟲ Rollback</button>
+{{- /* The ramp/promote/rollback controls now live in the static Deploy modal in
+       index.html (driven by fetch, not htmx). Only the recover action stays here;
+       its toast fragment targets #toast. */ -}}
 <button class="btn" hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover stuck orders</button>
 {{- end -}}
 

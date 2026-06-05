@@ -55,9 +55,9 @@ func TestRendererRegions(t *testing.T) {
 	}{
 		{"kpis", []string{
 			"In flight", ">2<", // in-flight count
-			`vb b-v2`,            // current version badge color
-			`vb b-v3`,            // ramping version badge color
-			"<small>10%</small>", // ramping pct
+			`vb b-v2`,         // current version badge color
+			`vb b-v3`,         // ramping version badge color
+			`class="pct">10%`, // ramping pct
 		}},
 		{"orders", []string{
 			"#order-1", "#order-2",
@@ -79,12 +79,7 @@ func TestRendererRegions(t *testing.T) {
 			`<span class="b-v3" style="--bar-w:10%">`, // v3 ramping bar at 10%
 		}},
 		{"controls", []string{
-			`hx-post="/api/ramp"`,
-			`hx-vals='{"percentage":10}'`,
-			`hx-post="/api/promote"`,
-			`hx-post="/api/rollback"`,
 			`hx-post="/api/recover"`,
-			`btn active`, // 10% ramp highlighted
 		}},
 	}
 
