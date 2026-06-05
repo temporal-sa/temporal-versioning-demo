@@ -59,3 +59,13 @@ func TestDecideBootstrap(t *testing.T) {
 		})
 	}
 }
+
+func TestBootstrapBuildIDPicksV1(t *testing.T) {
+	labels := map[string]string{"bX": "v2", "bY": "v1", "bZ": "v3"}
+	if got := bootstrapBuildID(labels); got != "bY" {
+		t.Errorf("bootstrapBuildID = %q, want bY (the v1 build)", got)
+	}
+	if got := bootstrapBuildID(map[string]string{"bX": "v2"}); got != "" {
+		t.Errorf("no v1 present = %q, want \"\"", got)
+	}
+}

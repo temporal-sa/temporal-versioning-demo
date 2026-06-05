@@ -51,7 +51,7 @@ func (s *Server) Routes() http.Handler {
 	})
 	mux.HandleFunc("GET /events", s.handleSSE)
 	mux.HandleFunc("POST /api/ramp", s.handleRamp)
-	mux.HandleFunc("POST /api/promote", s.handleAction(s.actions.Promote))
+	mux.HandleFunc("POST /api/promote", s.handlePromote)
 	mux.HandleFunc("POST /api/rollback", s.handleAction(s.actions.Rollback))
 	mux.HandleFunc("POST /api/recover", s.handleRecover)
 	mux.Handle("/", s.frontend)
@@ -126,23 +126,41 @@ func writeSSEEvent(w http.ResponseWriter, event, body string) error {
 	return err
 }
 
-func (s *Server) handleRamp(w http.ResponseWriter, r *http.Request) {
-	// HTMX posts hx-vals as application/x-www-form-urlencoded.
-	pct, err := strconv.ParseFloat(r.FormValue("percentage"), 32)
-	if err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid percentage")
-		return
-	}
-	if pct < 0 || pct > 100 {
-		s.writeError(w, http.StatusBadRequest, "percentage must be between 0 and 100")
-		return
-	}
+// validVersion guards the friendly labels the UI may send.
+func validVersion(v string) bool { return v == "v1" || v == "v2" || v == "v3" }
 
+func (s *Server) handleRamp(w http.ResponseWriter, r *http.Request) {
+	version := r.FormValue("version")
+	if !validVersion(version) {
+		s.writeError(w, http.StatusBadRequest, "invalid version")
+		return
+	}
+	pct, err := strconv.ParseFloat(r.FormValue("percentage"), 32)
+	if err != nil || (pct != 10 && pct != 25 && pct != 50 && pct != 100) {
+		s.writeError(w, http.StatusBadRequest, "percentage must be one of 10/25/50/100")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
 	defer cancel()
-	if err := s.actions.Ramp(ctx, float32(pct)); err != nil {
+	if err := s.actions.Ramp(ctx, version, float32(pct)); err != nil {
 		s.logger.Warn("ramp failed", "err", err)
 		s.writeError(w, http.StatusInternalServerError, "Ramp failed: "+err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
+	version := r.FormValue("version")
+	if !validVersion(version) {
+		s.writeError(w, http.StatusBadRequest, "invalid version")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
+	defer cancel()
+	if err := s.actions.Promote(ctx, version); err != nil {
+		s.logger.Warn("promote failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Promote failed: "+err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
