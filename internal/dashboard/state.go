@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -85,7 +86,7 @@ type LiveOrder struct {
 // CreateTime order (oldest summary = v1). Per-version override keeps mixed
 // states correct while workers publish their metadata.
 func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder) DashboardState {
-	sorted := append([]VersionSummary(nil), summaries...)
+	sorted := slices.Clone(summaries)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
 
 	// Label by version metadata when present; otherwise fall back to CreateTime

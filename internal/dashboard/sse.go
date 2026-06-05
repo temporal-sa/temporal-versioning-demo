@@ -44,10 +44,3 @@ func (h *Hub) Subscribe() (<-chan DashboardState, func()) {
 		h.mu.Unlock()
 	}
 }
-
-// Latest returns the most recent state and whether one exists.
-func (h *Hub) Latest() (DashboardState, bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.latest, h.hasData
-}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -66,6 +67,25 @@ func (a *Actions) cacheLabel(buildID, label string) {
 	a.labelCache[buildID] = label
 }
 
+// handle returns a handle to this Actions' worker deployment.
+func (a *Actions) handle() client.WorkerDeploymentHandle {
+	return a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
+}
+
+// setCurrent makes buildID the Current version. The lenient options are required
+// because a freshly-shipped version's pollers may not be registered yet, and its
+// task queues may differ from any prior version.
+func (a *Actions) setCurrent(ctx context.Context, buildID string) error {
+	if _, err := a.handle().SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
+		BuildID:                 buildID,
+		AllowNoPollers:          true,
+		IgnoreMissingTaskQueues: true,
+	}); err != nil {
+		return fmt.Errorf("set current version %q: %w", buildID, err)
+	}
+	return nil
+}
+
 // NewActions builds an Actions over the given client and deployment.
 func NewActions(c client.Client, deploymentName, namespace string, logger *slog.Logger) *Actions {
 	return &Actions{
@@ -79,7 +99,7 @@ func NewActions(c client.Client, deploymentName, namespace string, logger *slog.
 
 // Ramp routes pct% of new orders to the named version (v1/v2/v3).
 func (a *Actions) Ramp(ctx context.Context, version string, pct float32) error {
-	labelToBuild, _, _, _, err := a.versionIndex(ctx)
+	labelToBuild, err := a.versionIndex(ctx)
 	if err != nil {
 		return err
 	}
@@ -87,8 +107,7 @@ func (a *Actions) Ramp(ctx context.Context, version string, pct float32) error {
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrUnknownVersion, version)
 	}
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	if _, err := h.SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
+	if _, err := a.handle().SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
 		BuildID:                 buildID,
 		Percentage:              pct,
 		AllowNoPollers:          true,
@@ -101,7 +120,7 @@ func (a *Actions) Ramp(ctx context.Context, version string, pct float32) error {
 
 // Promote makes the named version Current (full cutover).
 func (a *Actions) Promote(ctx context.Context, version string) error {
-	labelToBuild, _, _, _, err := a.versionIndex(ctx)
+	labelToBuild, err := a.versionIndex(ctx)
 	if err != nil {
 		return err
 	}
@@ -109,40 +128,21 @@ func (a *Actions) Promote(ctx context.Context, version string) error {
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrUnknownVersion, version)
 	}
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	if _, err := h.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
-		BuildID:                 buildID,
-		AllowNoPollers:          true,
-		IgnoreMissingTaskQueues: true,
-	}); err != nil {
-		return fmt.Errorf("set current version %q: %w", buildID, err)
-	}
-	return nil
+	return a.setCurrent(ctx, buildID)
 }
 
 // versionIndex resolves the live label↔Build ID mapping (metadata-first, with a
-// CreateTime fallback) plus the current/ramping Build IDs.
-func (a *Actions) versionIndex(ctx context.Context) (
-	labelToBuild, buildToLabel map[string]string, current, ramping string, err error,
-) {
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	resp, err := h.Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+// CreateTime fallback).
+func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]string, err error) {
+	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
-		return nil, nil, "", "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
-	}
-	rc := resp.Info.RoutingConfig
-	if rc.CurrentVersion != nil {
-		current = rc.CurrentVersion.BuildID
-	}
-	if rc.RampingVersion != nil {
-		ramping = rc.RampingVersion.BuildID
+		return nil, fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
 
-	sorted := append([]client.WorkerDeploymentVersionSummary(nil), resp.Info.VersionSummaries...)
+	sorted := slices.Clone(resp.Info.VersionSummaries)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
 
 	labelToBuild = map[string]string{}
-	buildToLabel = map[string]string{}
 	for i, s := range sorted {
 		buildID := s.Version.BuildID
 		labelVal, cached := a.cachedLabel(buildID)
@@ -156,9 +156,8 @@ func (a *Actions) versionIndex(ctx context.Context) (
 			labelVal = friendly(i) // CreateTime fallback (oldest = v1)
 		}
 		labelToBuild[labelVal] = buildID
-		buildToLabel[buildID] = labelVal
 	}
-	return labelToBuild, buildToLabel, current, ramping, nil
+	return labelToBuild, nil
 }
 
 // metadataLabels resolves a buildID→label map using version metadata only (no
@@ -166,8 +165,7 @@ func (a *Actions) versionIndex(ctx context.Context) (
 // for a worker to actually publish pizzaVersion=v1 instead of promoting an
 // arbitrary (oldest-registered) build when all versions start together.
 func (a *Actions) metadataLabels(ctx context.Context) (buildToLabel map[string]string, current string, err error) {
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	resp, err := h.Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
 		return nil, "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
@@ -258,7 +256,7 @@ func (a *Actions) EnsureCurrentVersion(ctx context.Context, pollInterval time.Du
 			a.logger.Info("current version already set, skipping bootstrap", "currentBuild", current)
 			return
 		case bootstrapPromote:
-			if err := a.promoteBootstrap(ctx, buildID); err != nil {
+			if err := a.setCurrent(ctx, buildID); err != nil {
 				// Treat as transient: keep retrying until the deadline.
 				a.logger.Warn("bootstrap promote failed, will retry", "build", buildID, "err", err)
 				break
@@ -287,28 +285,12 @@ func (a *Actions) EnsureCurrentVersion(ctx context.Context, pollInterval time.Du
 	}
 }
 
-// promoteBootstrap sets buildID as the Current version, reusing the same lenient
-// options as Promote (the freshly-shipped version's pollers may not be registered
-// yet, and its task queues may differ from any prior version).
-func (a *Actions) promoteBootstrap(ctx context.Context, buildID string) error {
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	if _, err := h.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
-		BuildID:                 buildID,
-		AllowNoPollers:          true,
-		IgnoreMissingTaskQueues: true,
-	}); err != nil {
-		return fmt.Errorf("set current version %q: %w", buildID, err)
-	}
-	return nil
-}
-
 // Rollback removes the ramp: 100% of new orders snap back to Current.
 func (a *Actions) Rollback(ctx context.Context) error {
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
 	// Percentage:0 is what clears the ramping version: an empty BuildID alone
 	// maps to "unversioned" rather than "no ramp". Clearing the ramp is safe here
 	// only because Current is non-nil, so new orders snap back to Current.
-	if _, err := h.SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
+	if _, err := a.handle().SetRampingVersion(ctx, client.WorkerDeploymentSetRampingVersionOptions{
 		BuildID:    "",
 		Percentage: 0,
 	}); err != nil {
@@ -447,8 +429,7 @@ func (a *Actions) firstWorkflowTaskCompletedID(ctx context.Context, exec *common
 // targetAndCurrent resolves the target build (ramping if set, else newest
 // non-current by CreateTime) and the current build from the live routing config.
 func (a *Actions) targetAndCurrent(ctx context.Context) (target, current string, err error) {
-	h := a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
-	resp, err := h.Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
 		return "", "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
@@ -462,7 +443,7 @@ func (a *Actions) targetAndCurrent(ctx context.Context) (target, current string,
 	}
 
 	// No ramp: target the newest version summary that is not the current build.
-	summaries := append([]client.WorkerDeploymentVersionSummary(nil), resp.Info.VersionSummaries...)
+	summaries := slices.Clone(resp.Info.VersionSummaries)
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].CreateTime.After(summaries[j].CreateTime)
 	})
