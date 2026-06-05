@@ -133,7 +133,7 @@ func stepNodes(o Order) []stepNode {
 // fill: a "--fill:N" custom property where N is the percentage of connector
 // track that is complete (0 when the order has fewer than two steps).
 func stepperStyle(o Order) template.CSS {
-	return template.CSS(fmt.Sprintf("--fill:%d", stepperFillPct(o)))
+	return template.CSS(fmt.Sprintf("--fill:%d", stepperFillPct(o))) //nolint:gosec // value is an integer, not user input
 }
 
 // stepperFillPct is the percentage of the connector track to paint green:
