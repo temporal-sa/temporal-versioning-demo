@@ -58,10 +58,11 @@ type DashboardState struct {
 
 // VersionSummary mirrors the fields BuildState needs from a Temporal version summary.
 type VersionSummary struct {
-	BuildID    string
-	CreateTime time.Time
-	Draining   bool
-	Drained    bool
+	BuildID      string
+	PizzaVersion string // friendly label from version metadata; "" => fall back to CreateTime
+	CreateTime   time.Time
+	Draining     bool
+	Drained      bool
 }
 
 // Routing mirrors the routing config BuildState needs.
@@ -80,14 +81,23 @@ type LiveOrder struct {
 }
 
 // BuildState maps Temporal data to the SPA payload. Friendly version labels are
-// assigned by CreateTime order (oldest summary = v1).
+// assigned from version metadata when present; otherwise they fall back to
+// CreateTime order (oldest summary = v1). Per-version override keeps mixed
+// states correct while workers publish their metadata.
 func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder) DashboardState {
 	sorted := append([]VersionSummary(nil), summaries...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
 
+	// Label by version metadata when present; otherwise fall back to CreateTime
+	// order (oldest = v1). Per-version override keeps mixed states correct while
+	// the three workers publish their metadata.
 	label := make(map[string]string, len(sorted)) // buildID -> v1/v2/v3
 	for i, s := range sorted {
-		label[s.BuildID] = friendly(i)
+		if s.PizzaVersion != "" {
+			label[s.BuildID] = s.PizzaVersion
+		} else {
+			label[s.BuildID] = friendly(i)
+		}
 	}
 
 	pinned := make(map[string]int, len(sorted)) // buildID -> open order count

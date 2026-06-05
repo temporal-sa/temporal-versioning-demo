@@ -53,3 +53,25 @@ func TestBuildStateLabelsByCreateTimeAndCountsPinned(t *testing.T) {
 		t.Errorf("v3 card = %+v", byVer["v3"])
 	}
 }
+
+func TestBuildStateLabelsByMetadataWhenPresent(t *testing.T) {
+	base := time.Unix(1_000_000, 0)
+	// CreateTime order would label b_new=v1, but metadata says it is v3.
+	summaries := []dashboard.VersionSummary{
+		{BuildID: "b_new", CreateTime: base, PizzaVersion: "v3"},
+		{BuildID: "b_old", CreateTime: base.Add(2 * time.Minute), PizzaVersion: "v1"},
+	}
+	routing := dashboard.Routing{CurrentBuildID: "b_old"}
+	st := dashboard.BuildState(routing, summaries, nil)
+
+	if st.KPIs.CurrentVersion != "v1" {
+		t.Errorf("current label = %q, want v1 (from metadata)", st.KPIs.CurrentVersion)
+	}
+	byVer := map[string]dashboard.VersionCard{}
+	for _, c := range st.Versions {
+		byVer[c.Version] = c
+	}
+	if _, ok := byVer["v3"]; !ok {
+		t.Errorf("expected a v3 card from metadata, got %+v", st.Versions)
+	}
+}
