@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
 	"go.temporal.io/sdk/client"
@@ -89,9 +90,52 @@ func run(logger *slog.Logger) error {
 	}
 	defer w.Stop()
 
+	// Publish this worker's friendly shape label (v1/v2/v3) as Worker Deployment
+	// Version metadata so the dashboard can label/route by it (CreateTime ordering
+	// is racy when all versions start together). Best-effort: a freshly started
+	// version may not be registered until its first poll, so retry briefly; never
+	// fail the worker if this does not land.
+	go publishVersionLabel(ctx, c, cfg.deploymentName, cfg.buildID, cfg.version, logger)
+
 	<-ctx.Done()
 	logger.Info("pizza worker stopped")
 	return nil
+}
+
+// publishVersionLabel upserts the worker's friendly version label (v1/v2/v3) into
+// its Worker Deployment Version metadata under the "pizzaVersion" key. Best-effort
+// with a bounded retry because the version may not be registered until the first
+// poll; it never blocks shutdown (honors ctx) and never fails the worker.
+//
+// The "pizzaVersion" key MUST match dashboard.metaKeyPizzaVersion (cmd cannot
+// import that unexported const).
+func publishVersionLabel(
+	ctx context.Context,
+	c client.Client,
+	deploymentName, buildID, version string,
+	logger *slog.Logger,
+) {
+	h := c.WorkerDeploymentClient().GetHandle(deploymentName)
+	opts := client.WorkerDeploymentUpdateVersionMetadataOptions{
+		Version: worker.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildID: buildID},
+		MetadataUpdate: client.WorkerDeploymentMetadataUpdate{
+			UpsertEntries: map[string]any{"pizzaVersion": version},
+		},
+	}
+	for attempt := 0; attempt < 12; attempt++ {
+		_, err := h.UpdateVersionMetadata(ctx, opts)
+		if err == nil {
+			logger.Info("published version metadata", "buildID", buildID, "pizzaVersion", version)
+			return
+		}
+		logger.Debug("version metadata not yet writable, will retry", "buildID", buildID, "err", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
+	logger.Warn("gave up publishing version metadata", "buildID", buildID)
 }
 
 func getenv(key, fallback string) string {
