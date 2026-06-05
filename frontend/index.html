@@ -299,6 +299,11 @@
         @apply rounded-xl p-[13px_14px];
         background: #15151d;
         border: 1px solid #20202a;
+        /* Transparent ring so the hover outline can ease in/out; outline-offset
+           sits it just OUTSIDE the border. Outline (not box-shadow) keeps it
+           layout-free, so the masonry script's offsetHeight reads stay correct. */
+        outline: 1.5px solid transparent;
+        outline-offset: 2px;
         /* The masonry script places cards absolutely within the relative #orders;
            left/top/width are set inline per layout pass. */
         position: absolute;
@@ -312,19 +317,51 @@
            the script positions via left/top — so the two never conflict. */
         animation: card-in 0.35s ease backwards;
         /* Glide to new positions (left/top/width) and the Done collapse
-           (max-height/opacity/filter). */
+           (max-height/opacity/filter). The last four entries ease the hover
+           lift below; they do not affect the masonry-driven left/top/width. */
         transition:
           left 0.45s ease,
           top 0.45s ease,
           width 0.45s ease,
           max-height 0.5s ease,
           opacity 0.5s ease,
-          filter 0.4s ease;
+          filter 0.4s ease,
+          background-color 0.18s ease,
+          border-color 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          outline-color 0.18s ease;
       }
 
       .order.fail {
         border-color: #5b1d1d;
         background: #1a1416;
+      }
+
+      /* Hover lift, scoped out of the collapsing state so it never fights the
+         Done collapse. The lift uses transform (NOT top/margin) on purpose: the
+         masonry script owns inline left/top and reads offsetHeight, and a
+         transform changes neither — so the layout stays untouched. Switching
+         this to top/margin would desync the masonry. The neutral-grey outline
+         ring is an OUTLINE (not box-shadow) on purpose: it has no layout impact
+         and follows the border-radius, so it stays masonry-safe. Do not refactor
+         it into anything that affects box size. */
+      .order:hover:not([data-collapsing]) {
+        background-color: #1a1a24;
+        border-color: #2f2f3c;
+        /* Light, crisp grey clearly lighter than the hover border (#2f2f3c) so the
+           ring reads as a distinct outline. .order.fail:hover inherits this. */
+        outline-color: #4a4a57;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      }
+
+      /* Keep the red identity on hover so a failed card lifts without turning grey. */
+      .order.fail:hover:not([data-collapsing]) {
+        background-color: #241a1c;
+        border-color: #7a2a2a;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
       }
 
       /* Collapse: pure vertical collapse (grey + dim + height → 0). A Done card
