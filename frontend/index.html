@@ -132,6 +132,16 @@
         @apply shrink-0;
       }
 
+      /* Right-aligned "powered by" caption + Temporal logo lockup. */
+      .top .attribution {
+        @apply ml-auto flex items-center gap-2 text-[12px] uppercase tracking-wide text-white/55;
+      }
+
+      .top .attribution img {
+        @apply block w-auto;
+        height: 32px;
+      }
+
       /* ===== KPI band =====
          A STABLE 4-column grid that never reflows between the idle and ramping
          states: In flight | Current | Ramping | Deploy. The Ramping cell keeps
@@ -720,6 +730,11 @@
             </g>
           </svg>
           <span>Pizza Tracker</span>
+        </div>
+        <div class="attribution">
+          <span>Workflow Versioning by</span>
+          <img src="https://images.ctfassets.net/0uuz8ydxyd9p/2ctnUPEhKA75tYnrl2Kzvj/90563965bc4ea2af9442b6eb4ba43180/Temporal_LogoLockup_Horizontal_light_1_2x.png"
+               alt="Temporal" />
         </div>
       </header>
 
