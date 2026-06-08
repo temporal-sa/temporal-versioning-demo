@@ -19,5 +19,8 @@ docs/superpowers/
 # Per-subagent scratch memory (project memory lives in .claude/project-memory/)
 .claude/agent-memory/
 
+# Claude Code scheduled-task lock (runtime, machine-local)
+.claude/scheduled_tasks.lock
+
 # cmux isolated worktrees
 .worktrees/
