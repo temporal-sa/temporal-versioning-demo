@@ -12,4 +12,4 @@
 - [Workflow waits are activity-side](references/workflow-waits-activity-side.md) — no workflow.Sleep/timers; dwell simulated in activities (injectable, zero in tests); Done set before the final activity.
 - [Frontend conventions & gotchas](references/frontend-conventions.md) — no build (Tailwind Play CDN), zero app JS (HTMX only), hypermedia URLs never `/api/` (`/deploy`, `/rollback`, `DELETE /modal`…), no per-version failure count; traps: `@media` can't `@apply`, `#orders`/`#versions` must morph not replace, content-keyed chip id replays the pulse, close with empty 200 not 204.
 - [Commit message convention](references/commit-convention.md) — subjects start with an imperative action verb; no scope/type prefix.
-- [Podman IPv6 healthcheck](references/podman-ipv6-healthcheck.md) — use `127.0.0.1:7233` not `localhost:7233` everywhere on the host; `localhost` hits IPv6 `::1` first and stalls under Podman.
+- [IPv6 localhost healthcheck](references/ipv6-localhost-healthcheck.md) — use `127.0.0.1:7233` not `localhost:7233` everywhere on the host; `localhost` hits IPv6 `::1` first while the dev server is IPv4-only, so it stalls.
