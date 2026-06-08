@@ -1,4 +1,4 @@
-# temporal-versioning-demo
+# Temporal Versioning Demo
 
 A customer-facing demo of Temporal **Worker Versioning** on
 Kubernetes. A live **Pizza Tracker** dashboard shows pizza
