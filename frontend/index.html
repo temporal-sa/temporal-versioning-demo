@@ -603,34 +603,32 @@
       }
 
       .modal {
-        @apply rounded-2xl p-5;
+        @apply rounded-2xl p-7;
         width: 360px;
         background: #15151d;
         border: 1px solid #2c2c38;
       }
 
       .modal h3 {
-        @apply m-0 mb-1 text-[17px] font-extrabold;
+        @apply m-0 mb-2 text-lg font-extrabold;
       }
 
-      .modal-sub,
       .modal-note {
-        @apply text-[12px];
+        @apply mt-5 text-xs leading-relaxed;
         color: #9aa;
       }
 
-      .modal .lbl {
-        @apply mt-[14px] mb-2 flex justify-between text-[11px] uppercase;
-        letter-spacing: 0.06em;
+      .modal-lbl {
+        @apply mt-5 mb-2 flex justify-between text-xs uppercase tracking-wider;
         color: #8a8a99;
       }
 
       .radios {
-        @apply flex gap-[9px];
+        @apply flex gap-2.5;
       }
 
       .radio {
-        @apply flex-1 cursor-pointer rounded-[10px] py-[10px] text-center;
+        @apply flex-1 cursor-pointer rounded-lg py-2.5 text-center transition-colors;
         border: 1px solid #2c2c38;
         background: #1b1b24;
       }
@@ -640,6 +638,11 @@
         background: #1d2944;
       }
 
+      .radio:not(:has(input:checked)):hover {
+        border-color: #3f3f4d;
+        background: #22222c;
+      }
+
       .radio input {
         display: none;
       }
@@ -647,17 +650,12 @@
       /* Modal range input: 4 reachable stops (10/25/50/100) via min=0 max=3.
          Named distinctly from .stepper (the order-card progress bar). */
       .stepper-range {
-        @apply w-full;
+        @apply block w-full;
         accent-color: var(--color-amber);
       }
 
-      .scale {
-        @apply flex justify-between text-[11px] font-bold;
-        color: #9aa;
-      }
-
       .modal-acts {
-        @apply mt-[18px] flex gap-[9px];
+        @apply mt-5 flex gap-2.5;
       }
 
       .modal-acts .btn {
@@ -721,8 +719,7 @@
     <div id="deploy-modal" class="modal-scrim" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-label="Deploy a version">
         <h3>Deploy</h3>
-        <p class="modal-sub">Choose the target version and traffic percentage.</p>
-        <div class="lbl">Target version</div>
+        <div class="modal-lbl">Target version</div>
         <div class="radios">
           <label class="radio">
             <input type="radio" name="deploy-version" value="v1" checked />
@@ -737,10 +734,15 @@
             <span class="vb b-v3">v3</span>
           </label>
         </div>
-        <div class="lbl">Ramping <span id="deploy-pct" class="pct">10%</span></div>
+        <div class="modal-lbl">Ramping <span id="deploy-pct" class="pct">10%</span></div>
         <input id="deploy-slider" class="stepper-range" type="range" min="0" max="3" step="1" value="0"
-               oninput="onRampSlide(this.value)" />
-        <div class="scale"><b>10</b><b>25</b><b>50</b><b>100</b></div>
+               list="deploy-stops" oninput="onRampSlide(this.value)" />
+        <datalist id="deploy-stops">
+          <option value="0"></option>
+          <option value="1"></option>
+          <option value="2"></option>
+          <option value="3"></option>
+        </datalist>
         <p class="modal-note">At 100% this promotes the version to Current.</p>
         <div class="modal-acts">
           <button class="btn" type="button" onclick="closeDeploy()">Cancel</button>
@@ -823,6 +825,12 @@
         window.rollbackDeploy = function () {
           post("/api/rollback", "");
         };
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key !== "Escape") return;
+          var m = modal();
+          if (m && !m.hidden) window.closeDeploy();
+        });
       })();
     </script>
   </body>
