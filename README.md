@@ -248,9 +248,9 @@ recover), use the **Promote** button in the UI or the CLI:
 
 ```bash
 # Get the build id, then promote it:
-temporal worker deployment describe --deployment-name pizza
+temporal worker deployment describe --deployment-name pizza-tracker/pizza-worker
 temporal worker deployment set-current-version \
-  --deployment-name pizza --build-id <v1-build-id>
+  --deployment-name pizza-tracker/pizza-worker --build-id <v1-build-id>
 ```
 
 The dashboard is then available at

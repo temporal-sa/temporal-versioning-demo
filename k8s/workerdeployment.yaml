@@ -5,7 +5,7 @@
 apiVersion: temporal.io/v1alpha1
 kind: WorkerDeployment
 metadata:
-  name: pizza
+  name: pizza-worker
 spec:
   replicas: 1
   workerOptions:

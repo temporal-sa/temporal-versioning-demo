@@ -43,10 +43,10 @@ spec:
             - name: PIZZA_DEPLOYMENT_NAME
               # The Worker Controller names the deployment <namespace>/<name>.
               # Compose it from the pod's own namespace (Downward API) so no
-              # namespace is hardcoded; only the WorkerDeployment name (pizza)
-              # is fixed. Kubernetes expands $(POD_NAMESPACE) because it is
-              # defined earlier in this list.
-              value: $(POD_NAMESPACE)/pizza
+              # namespace is hardcoded; only the WorkerDeployment name
+              # (pizza-worker) is fixed. Kubernetes expands $(POD_NAMESPACE)
+              # because it is defined earlier in this list.
+              value: $(POD_NAMESPACE)/pizza-worker
           readinessProbe:
             httpGet:
               path: /healthz
