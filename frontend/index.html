@@ -166,6 +166,12 @@
         @apply ml-auto flex items-center gap-2 text-[12px] uppercase tracking-wide text-white/55;
       }
 
+      /* The logo links to temporal.io; inline-flex keeps the block img
+         vertically centered exactly as before (no inline line-height gap). */
+      .top .attribution a {
+        @apply inline-flex items-center;
+      }
+
       .top .attribution img {
         @apply block h-8 w-auto;
       }
@@ -592,8 +598,10 @@
         </a>
         <div class="attribution">
           <span>Workflow Versioning by</span>
-          <img src="https://images.ctfassets.net/0uuz8ydxyd9p/2ctnUPEhKA75tYnrl2Kzvj/90563965bc4ea2af9442b6eb4ba43180/Temporal_LogoLockup_Horizontal_light_1_2x.png"
-               alt="Temporal" />
+          <a href="https://temporal.io" target="_blank" rel="noopener noreferrer">
+            <img src="https://images.ctfassets.net/0uuz8ydxyd9p/2ctnUPEhKA75tYnrl2Kzvj/90563965bc4ea2af9442b6eb4ba43180/Temporal_LogoLockup_Horizontal_light_1_2x.png"
+                 alt="Temporal" />
+          </a>
         </div>
       </header>
 
