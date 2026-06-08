@@ -21,9 +21,15 @@ Durable rules for the Pizza Tracker SPA:
 - **SSE pushes server-rendered HTML, not JSON.** Named SSE events are swapped by
   HTMX into `sse-swap` targets; actions are `hx-post`; errors/toasts use
   response-targets into `#toast`.
-- **Prefer native Tailwind variants over hand-written `@media`** (v4 `@apply`
-  supports variants). Reserve a raw `@media` block only when it spans multiple
-  selectors.
+- **Media-based variants do NOT compile via `@apply` in the Play CDN.**
+  `@apply max-[760px]:…` (and other `@media`-based variants) emit *nothing* —
+  verified in-browser: only an explicit raw `@media` block produces a media
+  query. So **responsive and `prefers-reduced-motion` rules must stay as raw
+  `@media` blocks**. Non-media variants and selectors (`:hover`, `:has`,
+  `:not`), arbitrary-property utilities (`[scrollbar-gutter:stable]`,
+  `[outline:…]`), `animate-*` tokens and arbitrary transitions all compile
+  fine via `@apply`. (Corrects the earlier "prefer native variants over
+  `@media`" guidance.)
 - CDN scripts use floating major tags with no SRI — an accepted trade-off for
   the no-build demo (including the offline-cluster risk).
 
