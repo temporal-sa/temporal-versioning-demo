@@ -25,19 +25,19 @@ type toastView struct {
 }
 
 // rampStops mirrors the client slider stops; the slider value is the stop index.
-var rampStops = []int{10, 25, 50, 100}
+var rampStops = []int{25, 50, 100}
 
 // Ramp percentages with special meaning: the start of a new ramp and a full
 // promotion.
 const (
-	rampDefaultPct = 10
+	rampDefaultPct = 25
 	rampFullPct    = 100
 )
 
 // rampView is the view model for the ramp section (slider position + label).
 type rampView struct {
-	Pct     int // 10/25/50/100
-	StopIdx int // 0..3, slider position matching Pct
+	Pct     int // 25/50/100
+	StopIdx int // 0..2, slider position matching Pct
 }
 
 // deployVersionOption is one selectable radio in the Deploy modal.
@@ -74,7 +74,7 @@ func parseStop(s string) (idx, pct int, ok bool) {
 
 // rampViewForStop returns the ramp slider state for an explicitly chosen stop index
 // (the slider's own value), clamping any invalid input to the first stop so a
-// malformed query never escapes the 10/25/50/100 set.
+// malformed query never escapes the 25/50/100 set.
 func rampViewForStop(stop string) rampView {
 	idx, pct, ok := parseStop(stop)
 	if !ok {
@@ -86,7 +86,7 @@ func rampViewForStop(stop string) rampView {
 // rampViewFor returns the ramp slider state for the selected version, derived
 // from its deployment-card status: a Ramping version keeps its in-progress
 // percentage, the Current version is 100%, and any other version defaults to
-// 10% (the start of a new ramp).
+// 25% (the start of a new ramp).
 func rampViewFor(state DashboardState, selected string) rampView {
 	pct := rampDefaultPct
 	for _, c := range state.Versions {

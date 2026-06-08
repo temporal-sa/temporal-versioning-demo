@@ -30,7 +30,7 @@ guarantee visible on a live dashboard:
   new version never changes the shape of an order already in
   flight.
 - **Canary ramp** — shift a percentage of *new* orders onto a
-  new version straight from the UI (10% → 25% → 50% → 100%),
+  new version straight from the UI (25% → 50% → 100%),
   then promote it to Current for a full cutover.
 - **Instant rollback** — drop a bad version's ramp in one
   click; new orders snap back to the Current version and the
@@ -250,7 +250,7 @@ The on-stage flow that exercises every guarantee:
 
 > Ramp, promote and rollback are now driven from the **Deploy**
 > modal: pick the target version with the radio buttons and move
-> the 4-stop **10 / 25 / 50 / 100%** slider; reaching 100%
+> the 3-stop **25 / 50 / 100%** slider; reaching 100%
 > promotes that version to Current. Rollback drops the ramp from
 > the same modal. The KPI band shows the Current version plus
 > the active Ramping target and percentage.
@@ -260,12 +260,12 @@ The on-stage flow that exercises every guarantee:
 2. **Ship v2.** Set `PIZZA_VERSION: v2` in
    `k8s/workerdeployment.yaml` (optionally bump the image
    tag) and `kubectl apply -k k8s/`. Wait for the v2 pod.
-3. **Ramp v2.** In the UI, ramp 10% → 50% → 100%, then
+3. **Ramp v2.** In the UI, ramp 25% → 50% → 100%, then
    **Promote**. In-flight v1 orders keep their 4-step journey
    (pinned); new orders show the 5-step v2 pipeline with the
    Quality check. v1 drains and is sunset by the controller.
-4. **Ship v3 and ramp to 10%.** Set `PIZZA_VERSION: v3`,
-   apply, wait for the pod, then ramp v3 to 10%. About 10% of
+4. **Ship v3 and ramp to 25%.** Set `PIZZA_VERSION: v3`,
+   apply, wait for the pod, then ramp v3 to 25%. About 25% of
    new orders reach the Drone step, go **red** with a retry
    count, and stall. v2 orders are unaffected.
 5. **Rollback.** Click **Rollback**. The ramp drops to 0 and

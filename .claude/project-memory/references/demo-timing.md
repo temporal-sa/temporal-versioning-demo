@@ -8,7 +8,8 @@ type: project
 
 - Each work step takes ~15 s of **activity** time (`StepDwell`); the final
   `Deliver`/"Done" step has its own `DeliveredDwell` = 7 s. Orders start every
-  ~6 s; the UI ramp increments 10/25/50/100 %.
+  ~6 s; the UI ramp increments 25/50/100 % (the 10 % stop was dropped; the
+  smallest canary is now 25 %).
 - **Why `DeliveredDwell` is separate:** the order is marked Done right before
   `Deliver` runs, and the dashboard lists only Running workflows, so the all-green
   card stays on the board during `Deliver`'s dwell. The frontend keeps it visible

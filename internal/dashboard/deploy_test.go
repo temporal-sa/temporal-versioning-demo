@@ -172,12 +172,12 @@ func TestRampViewFor(t *testing.T) {
 		wantPct     int
 		wantStopIdx int
 	}{
-		{"ramping keeps its 25% at idx 1", rampingState("v3", 25, "v2", "v1", "v2", "v3"), "v3", 25, 1},
-		{"ramping at 50% at idx 2", rampingState("v3", 50, "v2", "v1", "v2", "v3"), "v3", 50, 2},
-		{"current -> 100% at idx 3", versionsState("v2", "v1", "v2", "v3"), "v2", 100, 3},
-		{"inactive -> 10% at idx 0", versionsState("v2", "v1", "v2", "v3"), "v1", 10, 0},
-		{"unknown selection -> 10% at idx 0", versionsState("v2", "v1", "v2", "v3"), "v9", 10, 0},
-		{"empty selection -> 10% at idx 0", versionsState("v2", "v1", "v2", "v3"), "", 10, 0},
+		{"ramping keeps its 25% at idx 0", rampingState("v3", 25, "v2", "v1", "v2", "v3"), "v3", 25, 0},
+		{"ramping at 50% at idx 1", rampingState("v3", 50, "v2", "v1", "v2", "v3"), "v3", 50, 1},
+		{"current -> 100% at idx 2", versionsState("v2", "v1", "v2", "v3"), "v2", 100, 2},
+		{"inactive -> 25% at idx 0", versionsState("v2", "v1", "v2", "v3"), "v1", 25, 0},
+		{"unknown selection -> 25% at idx 0", versionsState("v2", "v1", "v2", "v3"), "v9", 25, 0},
+		{"empty selection -> 25% at idx 0", versionsState("v2", "v1", "v2", "v3"), "", 25, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -256,19 +256,19 @@ func TestBuildDeployModalView(t *testing.T) {
 				t.Errorf("option %q should not be checked", opt.Version)
 			}
 		}
-		// The fallback selection is Inactive, so the ramp defaults to 10%.
-		if view.Ramp.Pct != 10 {
-			t.Errorf("Ramp.Pct = %d, want 10", view.Ramp.Pct)
+		// The fallback selection is Inactive, so the ramp defaults to 25%.
+		if view.Ramp.Pct != 25 {
+			t.Errorf("Ramp.Pct = %d, want 25", view.Ramp.Pct)
 		}
 	})
 
-	t.Run("no versions yields empty options at 10%", func(t *testing.T) {
+	t.Run("no versions yields empty options at 25%", func(t *testing.T) {
 		view := buildDeployModalView(DashboardState{})
 		if len(view.Versions) != 0 {
 			t.Errorf("got %d options, want 0", len(view.Versions))
 		}
-		if view.Ramp.Pct != 10 {
-			t.Errorf("Ramp.Pct = %d, want 10", view.Ramp.Pct)
+		if view.Ramp.Pct != 25 {
+			t.Errorf("Ramp.Pct = %d, want 25", view.Ramp.Pct)
 		}
 	})
 }
@@ -296,7 +296,7 @@ func TestRendererDeployModal(t *testing.T) {
 		`hx-post="/deploy"`,     // the form submits to the unified deploy endpoint
 		`type="submit"`,         // Apply is a real submit button
 		`100%`,                  // Current => 100% ramp
-		`value="3"`,             // slider at stop index 3
+		`value="2"`,             // slider at stop index 2
 	}
 	for _, w := range want {
 		if !strings.Contains(out, w) {
@@ -328,8 +328,8 @@ func TestRendererDeployRamp(t *testing.T) {
 		wantPct string
 		wantIdx string
 	}{
-		{"current at 100%", rampViewFor(versionsState("v2", "v1", "v2"), "v2"), "100%", `value="3"`},
-		{"other at 10%", rampViewFor(versionsState("v2", "v1", "v2"), "v1"), "10%", `value="0"`},
+		{"current at 100%", rampViewFor(versionsState("v2", "v1", "v2"), "v2"), "100%", `value="2"`},
+		{"other at 25%", rampViewFor(versionsState("v2", "v1", "v2"), "v1"), "25%", `value="0"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -355,11 +355,11 @@ func TestRampViewForStop(t *testing.T) {
 		wantPct     int
 		wantStopIdx int
 	}{
-		{"stop 0 -> 10% at idx 0", "0", 10, 0},
-		{"stop 3 -> 100% at idx 3", "3", 100, 3},
-		{"out of range -> 10% at idx 0", "9", 10, 0},
-		{"empty -> 10% at idx 0", "", 10, 0},
-		{"non-numeric -> 10% at idx 0", "x", 10, 0},
+		{"stop 0 -> 25% at idx 0", "0", 25, 0},
+		{"stop 2 -> 100% at idx 2", "2", 100, 2},
+		{"out of range -> 25% at idx 0", "9", 25, 0},
+		{"empty -> 25% at idx 0", "", 25, 0},
+		{"non-numeric -> 25% at idx 0", "x", 25, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -459,13 +459,13 @@ func TestHandleDeployValidation(t *testing.T) {
 func TestHandleDeployRampWithStop(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()
-	s.handleDeployRamp(rec, httptest.NewRequest(http.MethodGet, "/deploy/ramp?stop=3", nil))
+	s.handleDeployRamp(rec, httptest.NewRequest(http.MethodGet, "/deploy/ramp?stop=2", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	out := rec.Body.String()
-	for _, w := range []string{`id="deploy-ramp"`, `100%`, `value="3"`} {
+	for _, w := range []string{`id="deploy-ramp"`, `100%`, `value="2"`} {
 		if !strings.Contains(out, w) {
 			t.Errorf("deploy ramp output missing %q\n--- body ---\n%s", w, out)
 		}

@@ -92,7 +92,7 @@
 {{- define "deploy-ramp" -}}
 <div id="deploy-ramp">
   <div class="modal-lbl">Ramping <span class="pct">{{.Pct}}%</span></div>
-  <input class="stepper-range" type="range" name="stop" min="0" max="3" step="1" value="{{.StopIdx}}"
+  <input class="stepper-range" type="range" name="stop" min="0" max="2" step="1" value="{{.StopIdx}}"
          list="deploy-stops"
          hx-get="/deploy/ramp" hx-trigger="change" hx-include="input[name='version']:checked"
          hx-target="#deploy-ramp" hx-swap="outerHTML" />
@@ -100,7 +100,6 @@
     <option value="0"></option>
     <option value="1"></option>
     <option value="2"></option>
-    <option value="3"></option>
   </datalist>
 </div>
 {{- end -}}
