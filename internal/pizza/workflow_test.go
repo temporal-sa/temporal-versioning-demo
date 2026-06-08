@@ -2,6 +2,7 @@ package pizza_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
@@ -22,6 +23,12 @@ func TestV1CompletesFourSteps(t *testing.T) {
 	}
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	steps := pizza.StepsFor(pizza.V1)
+	want := []pizza.StepLabel{pizza.StepReceived, pizza.StepCooking, pizza.StepOutForDelivery, pizza.StepDelivered}
+	if !slices.Equal(steps, want) {
+		t.Fatalf("v1 steps = %v, want %v", steps, want)
 	}
 }
 
@@ -93,7 +100,12 @@ func TestV3StallsOnDrone(t *testing.T) {
 			}
 			// Release the blocked drone .Get so the test ends instead of hanging.
 			env.CancelWorkflow()
-		})
+		},
+	)
 
 	env.ExecuteWorkflow(pizza.PizzaOrderV3, pizza.OrderInput{OrderID: 3, Pizza: "Diavola"})
+
+	if !asserted {
+		t.Fatal("drone never reached its retry loop; stall not observed")
+	}
 }

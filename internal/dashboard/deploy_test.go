@@ -415,6 +415,47 @@ func TestHandleRollbackModal(t *testing.T) {
 	}
 }
 
+// TestHandleDeployValidation covers the two 400 validation paths in handleDeploy.
+// Both reject the request before touching s.actions, so a nil Temporal client is
+// fine here. The error body is the toast fragment rendered by writeError, so we
+// assert on its stable message substring.
+func TestHandleDeployValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantMsg string
+	}{
+		{"invalid version", "version=v9&stop=3", "invalid version"},
+		{"non-numeric stop", "version=v2&stop=x", "invalid ramp selection"},
+		{"out-of-range stop", "version=v2&stop=99", "invalid ramp selection"},
+		{"negative stop", "version=v2&stop=-1", "invalid ramp selection"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t)
+			req := httptest.NewRequest(http.MethodPost, "/api/deploy", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+
+			s.handleDeploy(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+			}
+			out := rec.Body.String()
+			if out == "" {
+				t.Fatal("body should carry the toast fragment, got empty")
+			}
+			if !strings.Contains(out, tt.wantMsg) {
+				t.Errorf("body missing %q\n--- body ---\n%s", tt.wantMsg, out)
+			}
+			if !strings.Contains(out, `class="toast`) {
+				t.Errorf("body should be the toast fragment\n--- body ---\n%s", out)
+			}
+		})
+	}
+}
+
 func TestHandleDeployRampWithStop(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()

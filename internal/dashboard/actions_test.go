@@ -47,6 +47,13 @@ func TestDecideBootstrap(t *testing.T) {
 			wantDecision: bootstrapPromote,
 			wantBuildID:  "b1",
 		},
+		{
+			name:         "target present but describe errored waits",
+			target:       "b1",
+			current:      "",
+			err:          describeErr,
+			wantDecision: bootstrapWait,
+		},
 	}
 
 	for _, tt := range tests {
@@ -87,4 +94,10 @@ func TestActionsLabelCacheConcurrent(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+
+	// With 50 iterations and n%5 keys, every "b0".."b4" is written at least
+	// once, so a known key must round-trip through the cache.
+	if got, ok := a.cachedLabel("b0"); !ok || got != "v1" {
+		t.Errorf("cachedLabel(%q) = %q, %v; want %q, true", "b0", got, ok, "v1")
+	}
 }
