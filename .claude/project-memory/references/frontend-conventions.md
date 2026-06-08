@@ -45,6 +45,18 @@ in `frontend/index.html` and the Go templates and is self-describing.
   every tick and kills the entry animation and the CSS stepper-fill transition.
   The Done card's visible-then-collapse is pure CSS, sized to finish within
   `DeliveredDwell` (see [[demo-timing]]).
+- **`#versions` also morphs** for the same reason. The Deployment-zone cards
+  carry stable `id="ver-{Version}"` and the traffic-bar fill stable
+  `id="bar-{Version}"`, so the bar's `width` (`--bar-w`) transition glides when
+  the ramp % changes instead of jumping. A plain `innerHTML` swap (the old
+  default) recreated the cards every tick and killed every transition.
+- **The status chip's `id` is content-keyed ON PURPOSE.** It is
+  `id="chip-{Version}-{Status}-{TrafficPct}"`, so when status or % changes the id
+  changes, idiomorph drops + re-inserts the node, and that re-insertion replays
+  the `chip-pulse` CSS entry animation (zero-JS pulse on every deployment change).
+  Do **not** "simplify" it to a stable id — a stable id morphs in place and the
+  pulse never fires. The `.pin` "N in flight" count is deliberately left
+  unanimated (it changes nearly every tick; pulsing it is noise).
 - **HTMX won't swap on 204.** Modal-close / fragment-clear endpoints must return
   an **empty 200**, not 204, or the modal stays open.
 

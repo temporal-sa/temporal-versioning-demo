@@ -63,13 +63,22 @@ func TestRendererRegions(t *testing.T) {
 		}},
 		{"versions", []string{
 			`vb b-v1`, `vb b-v2`, `vb b-v3`,
+			`id="ver-v3"`,         // stable card id lets idiomorph morph the same node across SSE ticks
 			"INACTIVE",            // v1 inactive
 			`chip c-cur">CURRENT`, // v2 current
 			"RAMPING 10%",         // v3 ramping with pct
-			"1 in flight",         // v3 has one pinned (in-flight) order
+			// Content-keyed chip id: it encodes status + traffic %, so it changes
+			// when the chip's value changes, making idiomorph replace the node and
+			// replay the chip-pulse entry animation (no JS).
+			`id="chip-v2-CURRENT-90"`,
+			`id="chip-v3-RAMPING-10"`,
+			"1 in flight", // v3 has one pinned (in-flight) order
 			// Traffic bar fill: color via class, width via the --bar-w custom
 			// property (the rule itself lives in index.html, not the template).
-			`<span class="b-v3" style="--bar-w:10%">`, // v3 ramping bar at 10%
+			// The stable id="bar-v3" lets idiomorph morph the same span so its
+			// CSS width transition runs when --bar-w changes.
+			`<span id="bar-v3" class="b-v3"`, // v3 ramping bar node, stably identified
+			`style="--bar-w:10%">`,           // v3 ramping bar at 10%
 		}},
 	}
 

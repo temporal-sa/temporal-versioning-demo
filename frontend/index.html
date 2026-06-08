@@ -68,6 +68,7 @@
         --animate-card-in: card-in 0.35s ease backwards;
         --animate-card-collapse: card-collapse 0.5s ease 4s forwards;
         --animate-toast-out: toast-out 4s ease forwards;
+        --animate-chip-pulse: chip-pulse 0.45s ease;
 
         @keyframes pulse {
           0% {
@@ -100,6 +101,17 @@
           }
           100% {
             opacity: 0;
+          }
+        }
+
+        @keyframes chip-pulse {
+          0% {
+            transform: scale(1.18);
+            filter: brightness(1.5);
+          }
+          100% {
+            transform: scale(1);
+            filter: brightness(1);
           }
         }
 
@@ -266,7 +278,7 @@
       }
 
       .chip {
-        @apply rounded-md px-[7px] py-0.5 text-[9.5px] font-bold;
+        @apply rounded-md px-[7px] py-0.5 text-[9.5px] font-bold animate-chip-pulse;
       }
 
       .c-cur {
@@ -439,11 +451,19 @@
         .lbl {
           transition: none;
         }
+
+        .ver,
+        .bar > span,
+        .chip {
+          transition: none;
+          animation: none;
+        }
       }
 
       /* ===== Deployment panel ===== */
       .ver {
         @apply mb-[11px] rounded-[11px] border border-edge bg-surface p-3;
+        transition: opacity 0.3s ease;
       }
 
       .ver.inactive {
@@ -464,6 +484,7 @@
 
       .bar > span {
         @apply block h-full w-[var(--bar-w,0)];
+        transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       .pin {
@@ -613,7 +634,7 @@
 
         <aside class="dright">
           <div class="sect">Deployment</div>
-          <div id="versions" sse-swap="versions"></div>
+          <div id="versions" sse-swap="versions" hx-swap="morph:innerHTML"></div>
 
           <!-- Controls row, streamed server-side via SSE (sse-swap="controls")
                and morphed in place like #orders, so button nodes, htmx bindings
