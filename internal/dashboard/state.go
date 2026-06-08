@@ -44,9 +44,8 @@ type VersionCard struct {
 
 // DashboardState is the full SSE payload.
 type DashboardState struct {
-	Orders     []Order       `json:"orders"`
-	Versions   []VersionCard `json:"versions"`
-	Recovering bool          `json:"recovering"` // a recover action is in progress (server-side)
+	Orders   []Order       `json:"orders"`
+	Versions []VersionCard `json:"versions"`
 }
 
 // VersionSummary mirrors the fields BuildState needs from a Temporal version summary.

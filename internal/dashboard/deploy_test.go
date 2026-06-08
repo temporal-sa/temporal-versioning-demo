@@ -87,79 +87,34 @@ func TestHasRamping(t *testing.T) {
 	}
 }
 
-func TestHasFailing(t *testing.T) {
-	tests := []struct {
-		name  string
-		state DashboardState
-		want  bool
-	}{
-		{"true when an order is failing", DashboardState{Orders: []Order{{Failing: true}}}, true},
-		{"false when an order exists but none failing", DashboardState{Orders: []Order{{Failing: false}}}, false},
-		{"false for no orders", DashboardState{}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := hasFailing(tt.state.Orders); got != tt.want {
-				t.Errorf("hasFailing() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestRendererControls(t *testing.T) {
 	r, err := NewRenderer()
 	if err != nil {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	// Deploy always renders; Rollback and Recover each carry a disabled attribute
-	// immediately before their label, so assert on the precise `disabled>Label` markup.
+	// Deploy and Rollback always render; Rollback carries a disabled attribute
+	// immediately before its label, so assert on the precise `disabled>Rollback` markup.
+	// Recover is no longer a control here — it is now a per-card action.
 	always := []string{
 		`hx-get="/api/deploy-modal"`,   // Deploy opens the modal host
 		`hx-get="/api/rollback-modal"`, // Rollback opens the modal host
-		`hx-post="/api/recover"`,       // Recover
-	}
-
-	failingState := func() DashboardState {
-		st := rampingState("v3", 25, "v2", "v1", "v2", "v3")
-		st.Orders = []Order{{Failing: true}}
-		return st
-	}
-	noRampFailingState := func() DashboardState {
-		st := versionsState("v2", "v1", "v2", "v3")
-		st.Orders = []Order{{Failing: true}}
-		return st
 	}
 
 	tests := []struct {
 		name             string
 		state            DashboardState
 		rollbackDisabled bool
-		recoverDisabled  bool
 	}{
 		{
-			name:             "no ramp and no failing orders disables both",
+			name:             "no ramp disables rollback",
 			state:            versionsState("v2", "v1", "v2", "v3"),
 			rollbackDisabled: true,
-			recoverDisabled:  true,
 		},
 		{
-			name:             "ramping with no failing orders enables only rollback",
+			name:             "ramping enables rollback",
 			state:            rampingState("v3", 25, "v2", "v1", "v2", "v3"),
 			rollbackDisabled: false,
-			recoverDisabled:  true,
-		},
-		{
-			name:             "ramping with a failing order enables both",
-			state:            failingState(),
-			rollbackDisabled: false,
-			recoverDisabled:  false,
-		},
-		{
-			name:             "no ramp with a failing order enables only recover",
-			state:            noRampFailingState(),
-			rollbackDisabled: true,
-			recoverDisabled:  false,
 		},
 	}
 
@@ -174,39 +129,38 @@ func TestRendererControls(t *testing.T) {
 			if got := strings.Contains(out, `disabled>Rollback`); got != tt.rollbackDisabled {
 				t.Errorf("Rollback disabled = %v, want %v\n--- output ---\n%s", got, tt.rollbackDisabled, out)
 			}
-			if got := strings.Contains(out, `disabled>Recover`); got != tt.recoverDisabled {
-				t.Errorf("Recover disabled = %v, want %v\n--- output ---\n%s", got, tt.recoverDisabled, out)
+			if strings.Contains(out, `/api/recover`) {
+				t.Errorf("controls must not carry a recover button anymore\n--- output ---\n%s", out)
 			}
 		})
 	}
 }
 
-func TestRendererControlsRecovering(t *testing.T) {
+func TestOrderRecoverButton(t *testing.T) {
 	r, err := NewRenderer()
 	if err != nil {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	// Ramping + a failing order, then mark a recover in progress.
-	st := rampingState("v3", 25, "v2", "v1", "v2", "v3")
-	st.Orders = []Order{{Failing: true}}
-	st.Recovering = true
+	st := DashboardState{Orders: []Order{
+		{ID: "order-7", Version: "v3", Failing: true},
+		{ID: "order-8", Version: "v1", Failing: false},
+	}}
+	out := renderRegion(t, r, "orders", st)
 
-	out := renderRegion(t, r, "controls", st)
-
-	want := []string{
-		"Recovering…",            // busy label
-		`class="spinner"`,        // spinner element
-		` disabled`,              // not clickable while recovering
-		"btn recover recovering", // busy class on the button
-	}
-	for _, w := range want {
+	// A failing order shows the per-card recover button targeting its own workflow.
+	for _, w := range []string{
+		`hx-post="/api/recover/order-7"`,
+		`class="recover-btn"`,
+		`aria-label="Recover order-7"`,
+	} {
 		if !strings.Contains(out, w) {
-			t.Errorf("recovering controls output missing %q\n--- output ---\n%s", w, out)
+			t.Errorf("orders output missing %q\n--- output ---\n%s", w, out)
 		}
 	}
-	if strings.Contains(out, `>Recover<`) {
-		t.Errorf("recovering controls must not show the plain Recover label\n--- output ---\n%s", out)
+	// A healthy order has no recover button.
+	if strings.Contains(out, `hx-post="/api/recover/order-8"`) {
+		t.Errorf("healthy order must not carry a recover button\n--- output ---\n%s", out)
 	}
 }
 

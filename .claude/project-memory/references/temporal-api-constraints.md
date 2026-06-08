@@ -24,9 +24,12 @@ breakage:
   search attribute (value `<deployment>:<buildID>`, e.g. `pizza:v3-local`,
   colon-separated — note this differs from the dotted form in `versioning_info.version`).
   This was the root cause of the "Recover" button always reporting "Recovered 0"
-  (fixed in `Recover`/`recoverQueryFor`, `internal/dashboard/actions.go`). Recover
-  now selects orders NOT on Current via `TemporalWorkerDeploymentVersion != '…'`
-  (the `!=` operator works on the dev SQLite store); see [[worker-versioning-model]].
+  (originally fixed in `Recover`/`recoverQueryFor`, `internal/dashboard/actions.go`).
+  **Update (2026-06-08):** Recover is now a **per-card / per-workflow** action
+  (`Actions.RecoverOne`, `POST /api/recover/{id}`); `recoverQueryFor` and the
+  bulk in-error filter (`inError`/`hasFailingActivity`) were removed. Recover no
+  longer issues a visibility query at all — it resets the one workflow the
+  operator clicked. See [[worker-versioning-model]] and [[deployment-panel-ui]].
   **Same gotcha also broke the per-version "N in flight" counts** (now fixed): the
   reader sets `LiveOrder.BuildID = pinnedBuildID(exec)` from a list result
   (`temporal_reader.go`), so it is also always `""`; `BuildState` used to key

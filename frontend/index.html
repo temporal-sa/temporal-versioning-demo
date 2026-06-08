@@ -316,6 +316,25 @@
         @apply ml-auto text-[10.5px] opacity-45;
       }
 
+      /* Per-card recover action: a small raised text button (matching the toolbar
+         .btn look — raised surface + border) with amber text, shown on a failing
+         order just right of the version badge. The surface and border use a lighter
+         grey than .btn so the box stays visible on the dark failing card.
+         Disables itself while its request runs. */
+      .recover-btn {
+        @apply inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md
+          border border-[#3a3a44] bg-[#2c2c36] px-2 py-0.5 text-[11px] font-semibold leading-none
+          text-amber transition-colors;
+      }
+
+      .recover-btn:hover:not(:disabled) {
+        @apply border-[#52525c] bg-[#3a3a44];
+      }
+
+      .recover-btn:disabled {
+        @apply cursor-progress opacity-60;
+      }
+
       /* Reserve vertical room (pb) for the absolutely-positioned labels. */
       .stepper {
         @apply relative flex justify-between pb-[26px];
@@ -477,29 +496,6 @@
         @apply border-amber text-[#fde68a];
       }
 
-      /* Recover lights up amber when enabled (i.e. orders are failing); when
-         disabled it falls back to the muted plain .btn, so enabled vs disabled
-         read clearly apart. */
-      .btn.recover:not(:disabled) {
-        @apply border-amber bg-amber/10 text-[#fde68a];
-      }
-
-      .btn.recover:hover:not(:disabled) {
-        @apply bg-amber/20;
-      }
-
-      /* While the recover action runs server-side (DashboardState.Recovering, streamed
-         over SSE) the button shows a busy state: it stays amber instead of falling into
-         the muted :disabled look, shows a spinning ring, and is not clickable. */
-      .btn.recover.recovering {
-        @apply inline-flex cursor-progress items-center justify-center gap-1.5
-          border-amber bg-amber/10 text-[#fde68a] opacity-100;
-      }
-
-      .btn.recover .spinner {
-        @apply size-3 animate-spin rounded-full border-2 border-amber border-t-transparent;
-      }
-
       .btn.danger {
         @apply border-[#7f1d1d] bg-[#7f1d1d] text-white;
       }
@@ -623,10 +619,10 @@
 
           <!-- Controls row, streamed server-side via SSE (sse-swap="controls")
                and morphed in place like #orders, so button nodes, htmx bindings
-               and focus are preserved. The server re-renders all three buttons
-               every frame. Rollback carries the disabled attribute unless a
-               version is currently ramping; Recover carries it (and loses its
-               amber highlight) unless an order is currently failing. -->
+               and focus are preserved. The server re-renders both buttons every
+               frame. Rollback carries the disabled attribute unless a version is
+               currently ramping. (Recover is now a per-card amber icon button
+               shown on a failing order, not a control here.) -->
           <div class="controls" id="controls" sse-swap="controls" hx-swap="morph:innerHTML"></div>
         </aside>
       </div>
@@ -644,8 +640,9 @@
     <div id="modal-host"></div>
 
     <!-- Action results and errors are swapped here as toast fragments. The
-         Deploy/Rollback/Recover buttons live in the Deployment column controls
-         row; all surface error responses here via #toast. -->
+         Deploy/Rollback buttons live in the Deployment column controls row, and
+         each failing order card carries a per-card Recover button; all surface
+         success and error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
   </body>
 </html>

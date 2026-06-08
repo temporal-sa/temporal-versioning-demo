@@ -56,7 +56,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/close", s.handleClose)
 	mux.HandleFunc("POST /api/deploy", s.handleDeploy)
 	mux.HandleFunc("POST /api/rollback", s.handleRollback)
-	mux.HandleFunc("POST /api/recover", s.handleRecover)
+	mux.HandleFunc("POST /api/recover/{id}", s.handleRecoverOne)
 	mux.Handle("/", s.frontend)
 	return mux
 }
@@ -225,23 +225,17 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleRecover(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRecoverOne(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	ctx, cancel := context.WithTimeout(r.Context(), recoverTimeout)
 	defer cancel()
-
-	// Flip the controls into their busy state for the action's full duration; the
-	// flag streams to the browser over SSE (see Hub.SetRecovering).
-	s.hub.SetRecovering(true)
-	defer s.hub.SetRecovering(false)
-
-	recovered, err := s.actions.Recover(ctx)
-	if err != nil {
-		s.logger.Warn("recover failed", "err", err)
+	if err := s.actions.RecoverOne(ctx, id); err != nil {
+		s.logger.Warn("recover failed", "workflowId", id, "err", err)
 		s.writeError(w, http.StatusInternalServerError, "Recover failed: "+err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderer.Toast(w, fmt.Sprintf("Recovered %d stuck order(s)", recovered)); err != nil {
+	if err := s.renderer.Toast(w, fmt.Sprintf("Recovered %s", id)); err != nil {
 		s.logger.Warn("render recover toast failed", "err", err)
 	}
 }

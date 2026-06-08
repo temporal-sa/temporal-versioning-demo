@@ -4,49 +4,26 @@ import "sync"
 
 // Hub fans out DashboardState frames to SSE subscribers and remembers the latest.
 type Hub struct {
-	mu         sync.Mutex
-	subs       map[chan DashboardState]struct{}
-	latest     DashboardState
-	hasData    bool
-	recovering bool // a recover action is in progress; stamped onto published frames
+	mu      sync.Mutex
+	subs    map[chan DashboardState]struct{}
+	latest  DashboardState
+	hasData bool
 }
 
 // NewHub builds an empty Hub.
 func NewHub() *Hub { return &Hub{subs: map[chan DashboardState]struct{}{}} }
 
 // Publish stores the latest state and delivers it to all subscribers, dropping
-// frames for subscribers that are not keeping up. It stamps the current
-// recovering flag so periodic poll frames carry it for the action's duration.
+// frames for subscribers that are not keeping up.
 func (h *Hub) Publish(s DashboardState) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	s.Recovering = h.recovering
-	h.store(s)
-}
-
-// store records the latest state and fans it out to subscribers. It assumes the
-// caller holds h.mu.
-func (h *Hub) store(s DashboardState) {
 	h.latest, h.hasData = s, true
 	for ch := range h.subs {
 		select {
 		case ch <- s:
 		default:
 		}
-	}
-}
-
-// SetRecovering updates the in-progress flag and immediately re-publishes the
-// latest known state stamped with it, so the controls region flips into/out of
-// the "Recovering…" busy state without waiting for the next poll frame.
-func (h *Hub) SetRecovering(recovering bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.recovering = recovering
-	if h.hasData {
-		s := h.latest
-		s.Recovering = recovering
-		h.store(s)
 	}
 }
 

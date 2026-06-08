@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,29 +26,6 @@ var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promot
 // ErrUnknownVersion is returned when the UI asks to act on a version label that
 // is not registered in the deployment.
 var ErrUnknownVersion = errors.New("dashboard: unknown version")
-
-// recoverQueryFor builds the visibility query selecting every open PizzaOrder
-// workflow that is NOT pinned to the current build. The not-current predicate must
-// live in the query (not in a Go-side filter) because visibility —
-// ListWorkflowExecutions — does NOT populate VersioningInfo; only
-// DescribeWorkflowExecution does. We therefore filter on the built-in
-// TemporalWorkerDeploymentVersion search attribute, whose value is
-// "<deploymentName>:<buildID>". The interpolated value is single-quote-escaped for
-// safety. The oldest-first ordering that makes truncation deterministic (oldest-stuck
-// orders recovered first) is applied in Go after paging, because the dev server's
-// standard (SQLite) visibility store does not support ORDER BY.
-func recoverQueryFor(deploymentName, currentBuild string) string {
-	version := fmt.Sprintf("%s:%s", deploymentName, currentBuild)
-	escaped := strings.ReplaceAll(version, "'", "''")
-	return fmt.Sprintf(
-		"WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND TemporalWorkerDeploymentVersion != '%s'",
-		escaped,
-	)
-}
-
-// maxRecoverPerCall caps how many stuck orders one recover call resets, so a huge
-// backlog cannot turn into an unbounded burst of reset RPCs. Truncation is logged.
-const maxRecoverPerCall = 200
 
 // bootstrapTimeout bounds the EnsureCurrentVersion startup loop: if no version is
 // registered within this window we give up and leave promotion to the operator.
@@ -321,68 +297,27 @@ func (a *Actions) Rollback(ctx context.Context) error {
 	return nil
 }
 
-// Recover batch-resets every open order that is NOT on the Current build and moves
-// each onto the current build, atomically (reset-with-move).
-func (a *Actions) Recover(ctx context.Context) (int, error) {
+// RecoverOne resets a single in-error order onto the Current build (reset-with-move,
+// rewinding to the workflow start). It is the per-card recover action; the caller
+// (the UI) only offers it on a failing order.
+func (a *Actions) RecoverOne(ctx context.Context, workflowID string) error {
 	good, err := a.currentBuild(ctx)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if good == "" {
-		return 0, errors.New("dashboard: no current version to recover onto")
+		return errors.New("dashboard: no current version to recover onto")
 	}
-
-	// Page through every result: the standard visibility store does not support
-	// ORDER BY, so we cannot rely on server-side ordering for deterministic
-	// truncation and must collect all matches before sorting. The demo's open-order
-	// set is small; maxRecoverPerCall bounds the reset RPCs, not the listing. Every
-	// execution the query returns is, by construction, pinned to a NON-current build,
-	// so no Go-side filter is needed (and none is possible: visibility does not
-	// populate VersioningInfo).
-	query := recoverQueryFor(a.deploymentName, good)
-	var stuck []*workflowpb.WorkflowExecutionInfo
-	var pageToken []byte
-	for {
-		resp, err := a.c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Query:         query,
-			NextPageToken: pageToken,
-		})
-		if err != nil {
-			return 0, fmt.Errorf("list open orders: %w", err)
-		}
-		stuck = append(stuck, resp.Executions...)
-		pageToken = resp.NextPageToken
-		if len(pageToken) == 0 {
-			break
-		}
+	desc, err := a.c.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		return fmt.Errorf("describe workflow %q: %w", workflowID, err)
 	}
-
-	// Sort oldest-first in Go so truncation is deterministic: when the cap is hit,
-	// the oldest-stuck orders are recovered first.
-	sort.Slice(stuck, func(i, j int) bool {
-		return stuck[i].GetStartTime().AsTime().Before(stuck[j].GetStartTime().AsTime())
-	})
-
-	truncated := false
-	if len(stuck) > maxRecoverPerCall {
-		truncated = true
-		stuck = stuck[:maxRecoverPerCall]
+	exec := desc.GetWorkflowExecutionInfo().GetExecution()
+	if err := a.resetWithMove(ctx, exec, good); err != nil {
+		return fmt.Errorf("recover %q: %w", workflowID, err)
 	}
-	if truncated {
-		a.logger.Info("capping recover batch", "cap", maxRecoverPerCall)
-	}
-
-	recovered := 0
-	for _, exec := range stuck {
-		if err := a.resetWithMove(ctx, exec.GetExecution(), good); err != nil {
-			a.logger.Warn("recover: reset failed", "workflowId", exec.GetExecution().GetWorkflowId(), "err", err)
-			continue
-		}
-		recovered++
-	}
-	a.logger.Info("recover completed", "goodBuild", good,
-		"candidates", len(stuck), "recovered", recovered)
-	return recovered, nil
+	a.logger.Info("recovered order", "workflowId", workflowID, "goodBuild", good)
+	return nil
 }
 
 // currentBuild returns the deployment's Current build ID from the live routing

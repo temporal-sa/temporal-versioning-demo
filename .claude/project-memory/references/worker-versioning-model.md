@@ -27,13 +27,16 @@ How Worker Versioning is wired in this demo:
   take a friendly version label (resolved to a Build ID via the metadata labels):
   ramp = `SetRampingVersion{BuildID, Pct}`; promote = `SetCurrentVersion{BuildID}`;
   rollback = `SetRampingVersion` empty (safe while Current is non-nil); recover =
-  batch per-order `ResetWorkflowExecution` (reset-with-move, rewinding to the
-  **workflow start**) over **every** open order NOT on Current — visibility query
-  `TemporalWorkerDeploymentVersion != '<deployment>:<current>'` — pinning each new
-  run's `VersioningOverride` to the current Build ID. (Recover takes no target:
-  the former single bad-build selection — `selectTargetBuild`/`targetAndCurrent`,
-  the "target by version number not CreateTime" decision — was removed 2026-06-08
-  in favour of "reset anything ≠ Current".) The UI is a **Deploy modal**
+  **per-card / per-workflow** `Actions.RecoverOne(ctx, workflowID)` — a single
+  `ResetWorkflowExecution` (reset-with-move, rewinding to the **workflow start**)
+  pinning the new run's `VersioningOverride` to the current Build ID. It is
+  triggered by an amber ↻ button shown only on a failing order card (see
+  [[deployment-panel-ui]]); there is **no bulk recover**. (Recover history, all
+  2026-06-08: single bad-build selection (`selectTargetBuild`/`targetAndCurrent`)
+  → "reset anything ≠ Current" (`recoverQueryFor`, `!=` predicate) → bulk "reset
+  only in-error orders" (`inError`/`hasFailingActivity` via Describe) → finally
+  this per-card `RecoverOne`; every earlier bulk form was removed.) See
+  [[temporal-api-constraints]]. The UI is a **Deploy modal**
   (target radios v1/v2/v3 + a 4-stop slider 10/25/50/100; reaching 100 % maps to
   promote; ⟲ Rollback clears the ramp). The KPI band shows Current + the active
   Ramping target/% (read-only, reserved column so the layout never reflows).

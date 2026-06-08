@@ -9,6 +9,9 @@
 <div class="order{{if .Failing}} fail{{end}}{{if .Done}} done{{end}}" id="order-{{.ID}}">
   <div class="oh">
     {{- template "badge" .Version -}}
+    {{- if .Failing}}<button class="recover-btn" type="button" title="Recover {{.ID}}" aria-label="Recover {{.ID}}"
+            hx-post="/api/recover/{{.ID}}" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast"
+            hx-disabled-elt="this">Fix</button>{{end -}}
     <b>#{{.ID}}</b>
     {{- if .Pizza}}<span class="nm">{{.Pizza}}</span>{{end -}}
     <span class="el">{{elapsed .ElapsedSec}}</span>
@@ -45,15 +48,13 @@
 {{- end -}}
 
 {{- define "controls" -}}
-{{- /* . is a DashboardState. Rollback is disabled unless a version is ramping; Recover is disabled unless an order is failing. While a recover runs (.Recovering, streamed over SSE) the Recover button shows a busy "Recovering…" state and is not clickable. */ -}}
+{{- /* . is a DashboardState. Rollback is disabled unless a version is ramping. */ -}}
 <button class="btn primary" type="button"
         hx-get="/api/deploy-modal" hx-target="#modal-host" hx-swap="innerHTML"
         hx-target-error="#toast">Deploy</button>
 <button class="btn danger" type="button"
         hx-get="/api/rollback-modal" hx-target="#modal-host" hx-swap="innerHTML"
         hx-target-error="#toast"{{if not (hasRamping .Versions)}} disabled{{end}}>Rollback</button>
-<button class="btn recover{{if .Recovering}} recovering{{end}}" type="button"
-        hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast"{{if or .Recovering (not (hasFailing .Orders))}} disabled{{end}}>{{if .Recovering}}<span class="spinner" aria-hidden="true"></span>Recovering…{{else}}Recover{{end}}</button>
 {{- end -}}
 
 {{- define "toast" -}}
