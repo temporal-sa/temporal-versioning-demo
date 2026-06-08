@@ -12,16 +12,15 @@ import (
 var templateFS embed.FS
 
 // stepNode is the per-stepper-node view model: its CSS state class, the glyph
-// shown inside the dot, and the step label. The connector is now a single track
-// rendered by the stepper container, not per node.
+// shown inside the dot, and the step label.
 type stepNode struct {
 	Class string // "" | "done" | "cur" | "err"
 	Glyph string // "" | "✓" | "✕"
 	Label string
 }
 
-// recoverResult is the view model for the toast template.
-type recoverResult struct {
+// toastView is the view model for the toast template.
+type toastView struct {
 	Message string
 }
 
@@ -63,15 +62,25 @@ func stopIndex(pct int) int {
 	return 0
 }
 
-// rampViewForStop returns the ramp slider state for an explicitly chosen stop
-// index (the slider's own value). It clamps any invalid or out-of-range input
-// to the first stop, so a malformed query never escapes the 10/25/50/100 set.
-func rampViewForStop(stop string) rampView {
-	idx, err := strconv.Atoi(stop)
+// parseStop maps a slider stop index (as a string) to its ramp percentage. ok is
+// false when the value is missing, non-numeric, or outside the rampStops range.
+func parseStop(s string) (idx, pct int, ok bool) {
+	idx, err := strconv.Atoi(s)
 	if err != nil || idx < 0 || idx >= len(rampStops) {
-		idx = 0
+		return 0, 0, false
 	}
-	return rampView{Pct: rampStops[idx], StopIdx: idx}
+	return idx, rampStops[idx], true
+}
+
+// rampViewForStop returns the ramp slider state for an explicitly chosen stop index
+// (the slider's own value), clamping any invalid input to the first stop so a
+// malformed query never escapes the 10/25/50/100 set.
+func rampViewForStop(stop string) rampView {
+	idx, pct, ok := parseStop(stop)
+	if !ok {
+		idx, pct = 0, rampStops[0]
+	}
+	return rampView{Pct: pct, StopIdx: idx}
 }
 
 // rampViewFor returns the ramp slider state for the selected version, derived
@@ -155,7 +164,7 @@ func (r *Renderer) Region(w io.Writer, name string, state DashboardState) error 
 
 // Toast renders the toast fragment with the given message.
 func (r *Renderer) Toast(w io.Writer, message string) error {
-	if err := r.tmpl.ExecuteTemplate(w, "toast", recoverResult{Message: message}); err != nil {
+	if err := r.tmpl.ExecuteTemplate(w, "toast", toastView{Message: message}); err != nil {
 		return fmt.Errorf("render toast: %w", err)
 	}
 	return nil
@@ -230,8 +239,7 @@ func formatElapsed(seconds int) string {
 }
 
 // stepNodes computes the per-node stepper state for an order: the done/current/
-// error class and glyph. The connector is now a single track rendered by the
-// stepper container, not per node.
+// error class and glyph.
 func stepNodes(o Order) []stepNode {
 	nodes := make([]stepNode, len(o.Steps))
 	for i, label := range o.Steps {

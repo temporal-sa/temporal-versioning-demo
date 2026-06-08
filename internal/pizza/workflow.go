@@ -52,13 +52,10 @@ func run(ctx workflow.Context, in OrderInput, v Version) error {
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: StepDwell + 15*time.Second,
-		// Activities now lean on Temporal's native durable retry with no attempt limit
-		// (MaximumAttempts: 0 == retry forever). A permanently-broken step — the v3 drone —
-		// therefore keeps retrying indefinitely, so the order stays red/Running and never
-		// fails/completes. With InitialInterval (1s) and BackoffCoefficient (2.0) left at
-		// their defaults, the per-retry interval starts at 1s and doubles (1s→2s→4s→...),
-		// but MaximumInterval caps it at droneAttempt so it never backs off to the SDK
-		// default maximum (~100s) — keeping the retry cadence lively for the demo.
+		// Lean on Temporal's native durable retry with no attempt limit (MaximumAttempts: 0
+		// == retry forever): the permanently-broken v3 drone step keeps retrying, so the
+		// order stays red/Running and never fails/completes. MaximumInterval caps the
+		// backoff at droneAttempt so the retry cadence stays lively for the demo.
 		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 0, MaximumInterval: droneAttempt},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,23 +32,7 @@ type Actions struct {
 	deploymentName string
 	namespace      string
 	logger         *slog.Logger
-	mu             sync.Mutex        // guards labelCache
-	labelCache     map[string]string // buildID -> pizzaVersion
-}
-
-// cachedLabel returns the cached pizzaVersion label for a build, if known.
-func (a *Actions) cachedLabel(buildID string) (string, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	v, ok := a.labelCache[buildID]
-	return v, ok
-}
-
-// cacheLabel stores a resolved (non-empty) label for a build.
-func (a *Actions) cacheLabel(buildID, label string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.labelCache[buildID] = label
+	labels         *labelResolver
 }
 
 // handle returns a handle to this Actions' worker deployment.
@@ -78,7 +61,7 @@ func NewActions(c client.Client, deploymentName, namespace string, logger *slog.
 		deploymentName: deploymentName,
 		namespace:      namespace,
 		logger:         logger,
-		labelCache:     map[string]string{},
+		labels:         newLabelResolver(c, deploymentName, logger),
 	}
 }
 
@@ -118,7 +101,7 @@ func (a *Actions) Promote(ctx context.Context, version string) error {
 
 // versionIndex resolves the live label↔Build ID mapping (metadata-first, with a
 // CreateTime fallback).
-func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]string, err error) {
+func (a *Actions) versionIndex(ctx context.Context) (map[string]string, error) {
 	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
@@ -131,7 +114,7 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]str
 		return a.CreateTime.Compare(b.CreateTime)
 	})
 
-	labelToBuild = map[string]string{}
+	labelToBuild := map[string]string{}
 	for i, s := range sorted {
 		buildID := s.Version.BuildID
 		labelVal := buildToLabel[buildID]
@@ -143,38 +126,24 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]str
 	return labelToBuild, nil
 }
 
-// resolveLabel returns a build's friendly pizzaVersion label from metadata:
-// the cached value first, otherwise a fresh fetch (which it caches). It returns
-// "" when no metadata label is published, leaving any CreateTime-order fallback
-// to the caller, which alone knows the build's position in CreateTime order.
-func (a *Actions) resolveLabel(ctx context.Context, buildID string) string {
-	if v, cached := a.cachedLabel(buildID); cached {
-		return v
-	}
-	if v, err := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); err == nil && v != "" {
-		a.cacheLabel(buildID, v)
-		return v
-	}
-	return ""
-}
-
 // metadataLabels resolves a buildID→label map using version metadata only (no
 // CreateTime fallback) plus the current Build ID. Bootstrap uses this so it waits
 // for a worker to actually publish pizzaVersion=v1 instead of promoting an
 // arbitrary (oldest-registered) build when all versions start together.
-func (a *Actions) metadataLabels(ctx context.Context) (buildToLabel map[string]string, current string, err error) {
+func (a *Actions) metadataLabels(ctx context.Context) (map[string]string, string, error) {
 	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
 		return nil, "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
+	var current string
 	if rc := resp.Info.RoutingConfig; rc.CurrentVersion != nil {
 		current = rc.CurrentVersion.BuildID
 	}
 	return a.metadataLabelMap(ctx, resp.Info.VersionSummaries), current, nil
 }
 
-// metadataLabelMap resolves each summary's metadata label (cache-or-fetch via
-// resolveLabel) and returns a buildID→label map, omitting builds with no published
+// metadataLabelMap resolves each summary's metadata label (cache-or-fetch via the
+// label resolver) and returns a buildID→label map, omitting builds with no published
 // label. It is the shared loop behind versionIndex and metadataLabels; only the
 // caller decides what to do with unlabelled builds (CreateTime fallback vs. omit).
 func (a *Actions) metadataLabelMap(
@@ -184,7 +153,7 @@ func (a *Actions) metadataLabelMap(
 	buildToLabel := map[string]string{}
 	for _, s := range summaries {
 		buildID := s.Version.BuildID
-		if label := a.resolveLabel(ctx, buildID); label != "" {
+		if label := a.labels.label(ctx, buildID); label != "" {
 			buildToLabel[buildID] = label
 		}
 	}

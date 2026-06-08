@@ -4,6 +4,8 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"sync"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/client"
@@ -38,4 +40,43 @@ func fetchVersionLabel(ctx context.Context, c client.Client, deploymentName, bui
 		return "", fmt.Errorf("describe version %q: %w", buildID, err)
 	}
 	return decodeVersionLabel(desc.Info.Metadata), nil
+}
+
+// labelResolver caches each build's friendly pizzaVersion label, fetching it from
+// version metadata on first use. Safe for concurrent use.
+type labelResolver struct {
+	c              client.Client
+	deploymentName string
+	logger         *slog.Logger
+	mu             sync.Mutex
+	cache          map[string]string // buildID -> label; only non-empty labels are cached
+}
+
+func newLabelResolver(c client.Client, deploymentName string, logger *slog.Logger) *labelResolver {
+	return &labelResolver{c: c, deploymentName: deploymentName, logger: logger, cache: map[string]string{}}
+}
+
+// label returns the build's friendly metadata label, or "" when none is published
+// yet. Resolved labels are cached; "" is not, so a build is re-fetched until its
+// worker publishes the metadata. The caller decides any CreateTime fallback.
+func (r *labelResolver) label(ctx context.Context, buildID string) string {
+	r.mu.Lock()
+	if v, ok := r.cache[buildID]; ok {
+		r.mu.Unlock()
+		return v
+	}
+	r.mu.Unlock()
+
+	v, err := fetchVersionLabel(ctx, r.c, r.deploymentName, buildID)
+	if err != nil {
+		r.logger.Debug("version label fetch failed, using CreateTime fallback", "buildId", buildID, "err", err)
+		return ""
+	}
+	if v == "" {
+		return ""
+	}
+	r.mu.Lock()
+	r.cache[buildID] = v
+	r.mu.Unlock()
+	return v
 }

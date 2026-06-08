@@ -1,8 +1,11 @@
 package dashboard
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"sync"
 	"testing"
 )
@@ -79,25 +82,24 @@ func TestBootstrapBuildIDPicksV1(t *testing.T) {
 	}
 }
 
-// TestActionsLabelCacheConcurrent hammers the labelCache helpers from many
-// goroutines so `go test -race` flags any regression that drops the mutex guard.
-func TestActionsLabelCacheConcurrent(t *testing.T) {
-	a := &Actions{labelCache: map[string]string{}}
+// TestLabelResolverConcurrent hammers the resolver's cache from many goroutines
+// so `go test -race` flags any regression that drops the mutex guard. Keys are
+// pre-seeded so label() returns from the cache and never dials the nil client.
+func TestLabelResolverConcurrent(t *testing.T) {
+	r := newLabelResolver(nil, "pizza", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	for i := 0; i < 5; i++ {
+		r.cache[fmt.Sprintf("b%d", i)] = "v1"
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			id := fmt.Sprintf("b%d", n%5)
-			a.cacheLabel(id, "v1")
-			_, _ = a.cachedLabel(id)
+			_ = r.label(context.Background(), fmt.Sprintf("b%d", n%5))
 		}(i)
 	}
 	wg.Wait()
-
-	// With 50 iterations and n%5 keys, every "b0".."b4" is written at least
-	// once, so a known key must round-trip through the cache.
-	if got, ok := a.cachedLabel("b0"); !ok || got != "v1" {
-		t.Errorf("cachedLabel(%q) = %q, %v; want %q, true", "b0", got, ok, "v1")
+	if got := r.label(context.Background(), "b0"); got != "v1" {
+		t.Errorf("label(b0) = %q, want v1", got)
 	}
 }

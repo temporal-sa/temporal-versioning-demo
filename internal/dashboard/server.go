@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -191,12 +190,11 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid version")
 		return
 	}
-	idx, err := strconv.Atoi(r.FormValue("stop"))
-	if err != nil || idx < 0 || idx >= len(rampStops) {
+	_, pct, ok := parseStop(r.FormValue("stop"))
+	if !ok {
 		s.writeError(w, http.StatusBadRequest, "invalid ramp selection")
 		return
 	}
-	pct := rampStops[idx]
 	ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
 	defer cancel()
 	if pct == rampFullPct {

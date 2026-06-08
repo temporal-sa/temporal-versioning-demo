@@ -10,6 +10,6 @@ import (
 //go:embed index.html
 var assets embed.FS
 
-// Assets is the embedded SPA file system (currently just index.html), served by
-// the dashboard server via http.FileServerFS.
+// Assets is the embedded SPA file system, served by the dashboard server via
+// http.FileServerFS.
 var Assets fs.FS = assets

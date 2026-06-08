@@ -17,14 +17,11 @@ import (
 // Simulating these waits inside the activities (instead of the workflow sleeping)
 // keeps timers out of the workflow history.
 type Activities struct {
-	// Dwell is how long each work activity pretends to take. The zero value means
-	// "no dwell": unit tests construct &Activities{} so they run instantly.
+	// Dwell is how long each work activity pretends to take.
 	Dwell time.Duration
 	// DroneAttempt is how long each failing drone delivery attempt pretends to take.
-	// The zero value means "no wait", so unit tests run the retry loop instantly.
 	DroneAttempt time.Duration
-	// DeliverDwell is the (shorter) dwell of the final Deliver step, so completed
-	// orders leave the dashboard quickly. The zero value means "no dwell" (unit tests).
+	// DeliverDwell is the (shorter) dwell of the final Deliver step.
 	DeliverDwell time.Duration
 }
 
