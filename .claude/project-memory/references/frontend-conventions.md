@@ -1,6 +1,6 @@
 ---
 name: "Frontend conventions and gotchas"
-description: "Non-derivable frontend directives and traps: no build / Tailwind Play CDN, zero JS (HTMX only), the @media-can't-@apply trap, morph-not-replace, 200-not-204, no per-version failure count"
+description: "Non-derivable frontend directives and traps: no build / Tailwind Play CDN, zero JS (HTMX only), hypermedia URLs (never /api/), the @media-can't-@apply trap, morph-not-replace, 200-not-204, no per-version failure count"
 type: feedback
 ---
 
@@ -19,6 +19,14 @@ in `frontend/index.html` and the Go templates and is self-describing.
   server-rendered HTML (not JSON). No `<script>` block, no
   `onclick`/`oninput`/`hx-on` (only the head's CDN `<script src>` includes). Wire
   new interactions with htmx attributes + small fragment endpoints, never JS.
+- **Hypermedia URLs, never `/api/`.** The HTMX endpoints return server-rendered
+  HTML fragments, not JSON, so per HTMX's own guidance they deliberately avoid
+  the `/api/` prefix (which signals a stable JSON *data* API) and are named after
+  the resource + UI need: `GET`/`POST /deploy`, `GET /deploy/ramp`,
+  `GET`/`POST /rollback`, `POST /orders/{id}/recover`, and the modal is closed
+  with `DELETE /modal` (a resource delete, not a generic `/close` verb).
+  `GET /events` (SSE), `GET /healthz` and `/` (the SPA) are unchanged. When
+  adding an endpoint, follow this scheme — do **not** reintroduce `/api/`.
 - **No per-version failure count.** Version cards show only `N in flight`. Every
   activity retries forever (see [[demo-timing]]), so no workflow ends Failed and a
   failure count would mislead; the retrying state is shown per order (red card).

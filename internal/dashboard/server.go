@@ -52,13 +52,13 @@ func (s *Server) Routes() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /events", s.handleSSE)
-	mux.HandleFunc("GET /api/deploy-modal", s.handleDeployModal)
-	mux.HandleFunc("GET /api/rollback-modal", s.handleRollbackModal)
-	mux.HandleFunc("GET /api/deploy-ramp", s.handleDeployRamp)
-	mux.HandleFunc("GET /api/close", s.handleClose)
-	mux.HandleFunc("POST /api/deploy", s.handleDeploy)
-	mux.HandleFunc("POST /api/rollback", s.handleRollback)
-	mux.HandleFunc("POST /api/recover/{id}", s.handleRecoverOne)
+	mux.HandleFunc("GET /deploy", s.handleDeployModal)
+	mux.HandleFunc("GET /rollback", s.handleRollbackModal)
+	mux.HandleFunc("GET /deploy/ramp", s.handleDeployRamp)
+	mux.HandleFunc("DELETE /modal", s.handleClose)
+	mux.HandleFunc("POST /deploy", s.handleDeploy)
+	mux.HandleFunc("POST /rollback", s.handleRollback)
+	mux.HandleFunc("POST /orders/{id}/recover", s.handleRecoverOne)
 	mux.Handle("/", s.frontend)
 	return mux
 }
@@ -170,8 +170,9 @@ func (s *Server) handleDeployRamp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleClose empties #modal-host, closing whichever modal is open. The empty
-// 200 body (not 204) is what htmx swaps in to clear the host.
+// handleClose serves DELETE /modal: it empties #modal-host, closing whichever
+// modal is open. The empty 200 body (not 204) is what htmx swaps in to clear
+// the host.
 func (s *Server) handleClose(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

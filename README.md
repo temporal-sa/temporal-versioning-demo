@@ -78,9 +78,13 @@ graph TD
   The backend renders the dashboard server-side from each
   `DashboardState` and pushes the HTML fragments over
   **Server-Sent Events** (`GET /events`); HTMX swaps them into
-  the page. Rollout actions are driven through **REST**
-  (`POST /api/ramp`, `/api/promote`, `/api/rollback`,
-  `/api/recover`). The SPA (`index.html`) is embedded into the
+  the page. Rollout actions are driven through **hypermedia
+  endpoints** that return server-rendered **HTML fragments**
+  (not JSON), so they deliberately live off the `/api/` prefix:
+  `POST /deploy` (ramp or promote), `POST /rollback`, and
+  `POST /orders/{id}/recover`. Their modal fragments are served
+  by `GET /deploy` and `GET /rollback` and dismissed with
+  `DELETE /modal`. The SPA (`index.html`) is embedded into the
   backend binary.
 - **Go backend** (`cmd/backend`) — polls Temporal
   (`DescribeWorkerDeployment` for routing config and version

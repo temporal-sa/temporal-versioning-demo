@@ -11,8 +11,8 @@ import (
 )
 
 // newTestServer builds a Server with a live hub and renderer but no Temporal
-// client. It is suitable for handlers that only render fragments (deploy-ramp,
-// rollback-modal, close) and never touch s.actions.
+// client. It is suitable for handlers that only render fragments (deploy/ramp,
+// rollback, modal) and never touch s.actions.
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	renderer, err := NewRenderer()
@@ -97,8 +97,8 @@ func TestRendererControls(t *testing.T) {
 	// immediately before its label, so assert on the precise `disabled>Rollback` markup.
 	// Recover is no longer a control here — it is now a per-card action.
 	always := []string{
-		`hx-get="/api/deploy-modal"`,   // Deploy opens the modal host
-		`hx-get="/api/rollback-modal"`, // Rollback opens the modal host
+		`hx-get="/deploy"`,   // Deploy opens the modal host
+		`hx-get="/rollback"`, // Rollback opens the modal host
 	}
 
 	tests := []struct {
@@ -129,7 +129,7 @@ func TestRendererControls(t *testing.T) {
 			if got := strings.Contains(out, `disabled>Rollback`); got != tt.rollbackDisabled {
 				t.Errorf("Rollback disabled = %v, want %v\n--- output ---\n%s", got, tt.rollbackDisabled, out)
 			}
-			if strings.Contains(out, `/api/recover`) {
+			if strings.Contains(out, `/recover`) {
 				t.Errorf("controls must not carry a recover button anymore\n--- output ---\n%s", out)
 			}
 		})
@@ -150,7 +150,7 @@ func TestOrderRecoverButton(t *testing.T) {
 
 	// A failing order shows the per-card recover button targeting its own workflow.
 	for _, w := range []string{
-		`hx-post="/api/recover/order-7"`,
+		`hx-post="/orders/order-7/recover"`,
 		`class="recover-btn"`,
 		`aria-label="Recover order-7"`,
 	} {
@@ -159,7 +159,7 @@ func TestOrderRecoverButton(t *testing.T) {
 		}
 	}
 	// A healthy order has no recover button.
-	if strings.Contains(out, `hx-post="/api/recover/order-8"`) {
+	if strings.Contains(out, `hx-post="/orders/order-8/recover"`) {
 		t.Errorf("healthy order must not carry a recover button\n--- output ---\n%s", out)
 	}
 }
@@ -289,14 +289,14 @@ func TestRendererDeployModal(t *testing.T) {
 
 	want := []string{
 		`id="deploy-ramp"`,
-		`class="modal-scrim"`,       // full scrim is now part of the fragment
-		`name="version"`,            // radios post the version field
-		`value="v2" checked`,        // Current version pre-checked
-		`hx-get="/api/deploy-ramp"`, // radios drive the ramp re-render (no ?version=)
-		`hx-post="/api/deploy"`,     // the form submits to the unified deploy endpoint
-		`type="submit"`,             // Apply is a real submit button
-		`100%`,                      // Current => 100% ramp
-		`value="3"`,                 // slider at stop index 3
+		`class="modal-scrim"`,   // full scrim is now part of the fragment
+		`name="version"`,        // radios post the version field
+		`value="v2" checked`,    // Current version pre-checked
+		`hx-get="/deploy/ramp"`, // radios drive the ramp re-render (no ?version=)
+		`hx-post="/deploy"`,     // the form submits to the unified deploy endpoint
+		`type="submit"`,         // Apply is a real submit button
+		`100%`,                  // Current => 100% ramp
+		`value="3"`,             // slider at stop index 3
 	}
 	for _, w := range want {
 		if !strings.Contains(out, w) {
@@ -382,7 +382,7 @@ func TestRendererRollbackModal(t *testing.T) {
 		t.Fatalf("RollbackModal: %v", err)
 	}
 	out := buf.String()
-	for _, w := range []string{`class="modal-scrim"`, `Roll back?`, `hx-post="/api/rollback"`} {
+	for _, w := range []string{`class="modal-scrim"`, `Roll back?`, `hx-post="/rollback"`} {
 		if !strings.Contains(out, w) {
 			t.Errorf("rollback modal output missing %q\n--- output ---\n%s", w, out)
 		}
@@ -392,7 +392,7 @@ func TestRendererRollbackModal(t *testing.T) {
 func TestHandleClose(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()
-	s.handleClose(rec, httptest.NewRequest(http.MethodGet, "/api/close", nil))
+	s.handleClose(rec, httptest.NewRequest(http.MethodDelete, "/modal", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -405,7 +405,7 @@ func TestHandleClose(t *testing.T) {
 func TestHandleRollbackModal(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()
-	s.handleRollbackModal(rec, httptest.NewRequest(http.MethodGet, "/api/rollback-modal", nil))
+	s.handleRollbackModal(rec, httptest.NewRequest(http.MethodGet, "/rollback", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -433,7 +433,7 @@ func TestHandleDeployValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestServer(t)
-			req := httptest.NewRequest(http.MethodPost, "/api/deploy", strings.NewReader(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/deploy", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rec := httptest.NewRecorder()
 
@@ -459,7 +459,7 @@ func TestHandleDeployValidation(t *testing.T) {
 func TestHandleDeployRampWithStop(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()
-	s.handleDeployRamp(rec, httptest.NewRequest(http.MethodGet, "/api/deploy-ramp?stop=3", nil))
+	s.handleDeployRamp(rec, httptest.NewRequest(http.MethodGet, "/deploy/ramp?stop=3", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)

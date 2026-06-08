@@ -629,8 +629,8 @@
     <!-- Single modal host. A modal is open when the server has swapped a
          .modal-scrim fragment in here, closed when it is emptied — no JS, no
          hidden toggling. Deploy/Rollback (in the controls row) GET their modal
-         fragment into this host; Cancel and Escape GET /api/close to clear it.
-         The Deploy form posts /api/deploy and the server decides promote vs
+         fragment into this host; Cancel and Escape DELETE /modal to clear it.
+         The Deploy form posts /deploy and the server decides promote vs
          ramp; success returns an empty 200 that clears the host (closing the
          modal), while errors route to #toast (response-targets) so the modal
          stays open. The host sits outside every sse-swap region, so SSE frames
