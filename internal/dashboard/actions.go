@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,12 +28,23 @@ var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promot
 // is not registered in the deployment.
 var ErrUnknownVersion = errors.New("dashboard: unknown version")
 
-// recoverQuery selects every open PizzaOrder workflow; the bad-build filtering is
-// done in Go from each run's pinned Build ID (no reliance on an uncertain search
-// attribute name). The oldest-first ordering that makes truncation deterministic
-// (oldest-stuck orders recovered first) is applied in Go after paging, because the
-// dev server's standard (SQLite) visibility store does not support ORDER BY.
-const recoverQuery = "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running'"
+// recoverQueryFor builds the visibility query selecting every open PizzaOrder
+// workflow pinned to the bad build. The bad-build predicate must live in the query
+// (not in a Go-side filter) because visibility — ListWorkflowExecutions — does NOT
+// populate VersioningInfo; only DescribeWorkflowExecution does. We therefore filter
+// on the built-in TemporalWorkerDeploymentVersion search attribute, whose value is
+// "<deploymentName>:<buildID>". The interpolated value is single-quote-escaped for
+// safety. The oldest-first ordering that makes truncation deterministic (oldest-stuck
+// orders recovered first) is applied in Go after paging, because the dev server's
+// standard (SQLite) visibility store does not support ORDER BY.
+func recoverQueryFor(deploymentName, badBuild string) string {
+	version := fmt.Sprintf("%s:%s", deploymentName, badBuild)
+	escaped := strings.ReplaceAll(version, "'", "''")
+	return fmt.Sprintf(
+		"WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND TemporalWorkerDeploymentVersion = '%s'",
+		escaped,
+	)
+}
 
 // maxRecoverPerCall caps how many stuck orders one recover call resets, so a huge
 // backlog cannot turn into an unbounded burst of reset RPCs. Truncation is logged.
@@ -313,22 +325,22 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 	// Page through every result: the standard visibility store does not support
 	// ORDER BY, so we cannot rely on server-side ordering for deterministic
 	// truncation and must collect all matches before sorting. The demo's open-order
-	// set is small; maxRecoverPerCall bounds the reset RPCs, not the listing.
+	// set is small; maxRecoverPerCall bounds the reset RPCs, not the listing. Every
+	// execution the query returns is, by construction, pinned to the bad build, so
+	// no Go-side build filter is needed (and none is possible: visibility does not
+	// populate VersioningInfo).
+	query := recoverQueryFor(a.deploymentName, bad)
 	var stuck []*workflowpb.WorkflowExecutionInfo
 	var pageToken []byte
 	for {
 		resp, err := a.c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Query:         recoverQuery,
+			Query:         query,
 			NextPageToken: pageToken,
 		})
 		if err != nil {
 			return 0, fmt.Errorf("list open orders: %w", err)
 		}
-		for _, exec := range resp.Executions {
-			if pinnedBuildID(exec) == bad {
-				stuck = append(stuck, exec)
-			}
-		}
+		stuck = append(stuck, resp.Executions...)
 		pageToken = resp.NextPageToken
 		if len(pageToken) == 0 {
 			break

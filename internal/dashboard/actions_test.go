@@ -72,6 +72,38 @@ func TestBootstrapBuildIDPicksV1(t *testing.T) {
 	}
 }
 
+func TestRecoverQueryFor(t *testing.T) {
+	tests := []struct {
+		name           string
+		deploymentName string
+		badBuild       string
+		want           string
+	}{
+		{
+			name:           "builds the bad-build predicate",
+			deploymentName: "pizza",
+			badBuild:       "v3-local",
+			want: "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND " +
+				"TemporalWorkerDeploymentVersion = 'pizza:v3-local'",
+		},
+		{
+			name:           "single-quote-escapes the interpolated value",
+			deploymentName: "piz'za",
+			badBuild:       "v3'local",
+			want: "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND " +
+				"TemporalWorkerDeploymentVersion = 'piz''za:v3''local'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := recoverQueryFor(tt.deploymentName, tt.badBuild); got != tt.want {
+				t.Errorf("recoverQueryFor(%q, %q) = %q, want %q", tt.deploymentName, tt.badBuild, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestActionsLabelCacheConcurrent hammers the labelCache helpers from many
 // goroutines so `go test -race` flags any regression that drops the mutex guard.
 func TestActionsLabelCacheConcurrent(t *testing.T) {
