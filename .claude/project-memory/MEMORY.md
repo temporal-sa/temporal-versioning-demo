@@ -16,3 +16,4 @@
 - [Commit message convention](references/commit-convention.md) — subjects start with an imperative action verb; no scope/type prefix (no `Frontend:`/`Fix:`/`feat:`).
 - [Podman IPv6 healthcheck](references/podman-ipv6-healthcheck.md) — Use `127.0.0.1:7233` not `localhost:7233` everywhere (compose healthcheck + host dev defaults); `localhost` hits IPv6 `::1` first and stalls/fails under Podman.
 - [Deployment panel UI](references/deployment-panel-ui.md) — Deploy/Rollback/Recover button row, no KPI band, cards sorted v1→v2→v3 showing `N in flight`; no failure count (infinite retry → never Failed).
+- [Deploy modal HTMX](references/deploy-modal-htmx.md) — modal is server-rendered via HTMX (GET /api/deploy-modal + /api/deploy-ramp); ramp is status-driven (Ramping→its %, Current→100%, else 10%); pre-selects Ramping, else Current, else first; minimal client JS.

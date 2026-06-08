@@ -50,6 +50,8 @@ func (s *Server) Routes() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /events", s.handleSSE)
+	mux.HandleFunc("GET /api/deploy-modal", s.handleDeployModal)
+	mux.HandleFunc("GET /api/deploy-ramp", s.handleDeployRamp)
 	mux.HandleFunc("POST /api/ramp", s.handleRamp)
 	mux.HandleFunc("POST /api/promote", s.handlePromote)
 	mux.HandleFunc("POST /api/rollback", s.handleAction(s.actions.Rollback))
@@ -124,6 +126,29 @@ func writeSSEEvent(w http.ResponseWriter, event, body string) error {
 	}
 	_, err := fmt.Fprint(w, "\n")
 	return err
+}
+
+// handleDeployModal renders the Deploy modal fragment from the latest state,
+// pre-selecting the Ramping version (else Current, else first) with the ramp
+// slider set to match its status.
+func (s *Server) handleDeployModal(w http.ResponseWriter, _ *http.Request) {
+	view := buildDeployModalView(s.hub.Latest())
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.DeployModal(w, view); err != nil {
+		s.logger.Warn("render deploy modal failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Render failed: "+err.Error())
+	}
+}
+
+// handleDeployRamp re-renders only the ramp section for the selected version,
+// deriving the ramp percentage from that version's deployment-card status.
+func (s *Server) handleDeployRamp(w http.ResponseWriter, r *http.Request) {
+	view := rampViewFor(s.hub.Latest(), r.URL.Query().Get("version"))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.DeployRamp(w, view); err != nil {
+		s.logger.Warn("render deploy ramp failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Render failed: "+err.Error())
+	}
 }
 
 // validVersion guards the friendly labels the UI may send.

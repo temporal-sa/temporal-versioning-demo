@@ -47,3 +47,39 @@
 {{- define "toast" -}}
 <div class="toast show">{{.Message}}</div>
 {{- end -}}
+
+{{- define "deploy-modal" -}}
+<div class="modal" role="dialog" aria-modal="true" aria-label="Deploy a version">
+  <h3>Deploy</h3>
+  <div class="modal-lbl">Target version</div>
+  <div class="radios">
+    {{- range .Versions}}
+    <label class="radio">
+      <input type="radio" name="deploy-version" value="{{.Version}}"{{if .Checked}} checked{{end}}
+             hx-get="/api/deploy-ramp?version={{.Version}}" hx-target="#deploy-ramp" hx-swap="outerHTML" />
+      <span class="vb {{versionClass .Version}}">{{.Version}}</span>
+    </label>
+    {{- end}}
+  </div>
+  {{- template "deploy-ramp" .Ramp -}}
+  <p class="modal-note">At 100% this promotes the version to Current.</p>
+  <div class="modal-acts">
+    <button class="btn" type="button" onclick="closeDeploy()">Cancel</button>
+    <button class="btn primary" type="button" onclick="applyDeploy()">Apply</button>
+  </div>
+</div>
+{{- end -}}
+
+{{- define "deploy-ramp" -}}
+<div id="deploy-ramp">
+  <div class="modal-lbl">Ramping <span id="deploy-pct" class="pct">{{.Pct}}%</span></div>
+  <input id="deploy-slider" class="stepper-range" type="range" min="0" max="3" step="1" value="{{.StopIdx}}"
+         list="deploy-stops" oninput="onRampSlide(this.value)" />
+  <datalist id="deploy-stops">
+    <option value="0"></option>
+    <option value="1"></option>
+    <option value="2"></option>
+    <option value="3"></option>
+  </datalist>
+</div>
+{{- end -}}

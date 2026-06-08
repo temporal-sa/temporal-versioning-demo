@@ -7,10 +7,10 @@ type: project
 # Deployment panel UI and the no-failure-count rule
 
 The Deployment column (`.dright` in `frontend/index.html`) holds the version
-cards followed by a single row of three buttons: **Deploy** (opens the static
-Deploy modal), **Rollback** (POST `/api/rollback`), **Recover** (POST
-`/api/recover`, htmx). There is no KPI band — it was removed, so there is no
-global "In flight" total any more.
+cards followed by a single row of three buttons: **Deploy** (opens the
+HTMX-rendered Deploy modal — see [[deploy-modal-htmx]]), **Rollback** (POST
+`/api/rollback`), **Recover** (POST `/api/recover`, htmx). There is no KPI
+band — it was removed, so there is no global "In flight" total any more.
 
 Each version card is sorted **v1 → v2 → v3** and shows only an in-progress
 count: `{{.PinnedCount}} in flight`. Version cards deliberately show **no

@@ -27,6 +27,13 @@ func (h *Hub) Publish(s DashboardState) {
 	}
 }
 
+// Latest returns the most recently published state (zero value if none yet).
+func (h *Hub) Latest() DashboardState {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.latest
+}
+
 // Subscribe returns a channel pre-loaded with the latest state (if any) and an
 // unsubscribe func.
 func (h *Hub) Subscribe() (<-chan DashboardState, func()) {

@@ -603,7 +603,9 @@
           <div id="versions" sse-swap="versions"></div>
 
           <div class="controls">
-            <button class="btn primary" type="button" onclick="openDeploy()">Deploy</button>
+            <button class="btn primary" type="button"
+                    hx-get="/api/deploy-modal" hx-target="#deploy-modal-content" hx-swap="innerHTML"
+                    hx-on::after-request="if (event.detail.successful) openDeploy()">Deploy</button>
             <button class="btn danger" type="button" onclick="openRollback()">Rollback</button>
             <button class="btn" type="button"
                     hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover</button>
@@ -612,43 +614,15 @@
       </div>
     </div>
 
-    <!-- Deploy modal: the single interactive rollout control surface. It is
-         STATIC (outside every sse-swap region) so SSE frames never re-render or
-         close it. Its actions POST via fetch (see the deploy script below), not
-         htmx, and any error fragment is shown in #toast. -->
+    <!-- Deploy modal scrim: the backdrop + Escape-to-close target. The modal
+         itself is rendered server-side: the Deploy button GETs /api/deploy-modal
+         into #deploy-modal-content, then openDeploy() reveals this scrim after a
+         successful response. The
+         scrim is STATIC (outside every sse-swap region) so SSE frames never touch
+         it. The modal's own actions POST via fetch (see the deploy script below),
+         not htmx, and any error fragment is shown in #toast. -->
     <div id="deploy-modal" class="modal-scrim" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Deploy a version">
-        <h3>Deploy</h3>
-        <div class="modal-lbl">Target version</div>
-        <div class="radios">
-          <label class="radio">
-            <input type="radio" name="deploy-version" value="v1" checked />
-            <span class="vb b-v1">v1</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="deploy-version" value="v2" />
-            <span class="vb b-v2">v2</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="deploy-version" value="v3" />
-            <span class="vb b-v3">v3</span>
-          </label>
-        </div>
-        <div class="modal-lbl">Ramping <span id="deploy-pct" class="pct">10%</span></div>
-        <input id="deploy-slider" class="stepper-range" type="range" min="0" max="3" step="1" value="0"
-               list="deploy-stops" oninput="onRampSlide(this.value)" />
-        <datalist id="deploy-stops">
-          <option value="0"></option>
-          <option value="1"></option>
-          <option value="2"></option>
-          <option value="3"></option>
-        </datalist>
-        <p class="modal-note">At 100% this promotes the version to Current.</p>
-        <div class="modal-acts">
-          <button class="btn" type="button" onclick="closeDeploy()">Cancel</button>
-          <button class="btn primary" type="button" onclick="applyDeploy()">Apply</button>
-        </div>
-      </div>
+      <div id="deploy-modal-content"></div>
     </div>
 
     <!-- Rollback confirm modal: rollback is destructive, so it asks first.
@@ -672,15 +646,21 @@
 
     <!-- Deploy modal behavior.
 
-         The modal is static markup (outside every sse-swap region), so SSE
-         frames never touch it. Deploy/Rollback/Recover now live in the
-         Deployment column controls row; Deploy opens the deploy modal, Rollback
-         opens a confirm modal (confirmRollback posts /api/rollback), Recover via htmx. The modal's
-         own actions POST via fetch rather than htmx:
+         The modal is rendered server-side and driven by HTMX:
+           - Deploy button GETs /api/deploy-modal -> swaps the fragment into
+             #deploy-modal-content, then openDeploy() reveals the scrim after a
+             successful response. The server pre-checks the Current version and
+             sets the default ramp.
+           - Each version radio GETs /api/deploy-ramp?version=vX -> re-renders
+             just the #deploy-ramp section (100% for Current, else 10%).
+         The scrim is static markup (outside every sse-swap region), so SSE
+         frames never touch it. The modal's Apply/rollback actions still POST via
+         fetch rather than htmx:
            - Apply at 100% -> /api/promote (version), otherwise -> /api/ramp.
            - Rollback (from the controls row) -> /api/rollback.
          On success the modal closes; on error the response body (a toast HTML
-         fragment) is shown in #toast. The slider snaps to 4 reachable stops. -->
+         fragment) is shown in #toast. The slider snaps to 4 reachable stops, and
+         onRampSlide only updates the live label while dragging. -->
     <script>
       (function () {
         "use strict";

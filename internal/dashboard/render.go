@@ -24,6 +24,99 @@ type recoverResult struct {
 	Message string
 }
 
+// rampStops mirrors the client slider stops; the slider value is the stop index.
+var rampStops = []int{10, 25, 50, 100}
+
+// Ramp percentages with special meaning: the start of a new ramp and a full
+// promotion.
+const (
+	rampDefaultPct = 10
+	rampFullPct    = 100
+)
+
+// rampView is the view model for the ramp section (slider position + label).
+type rampView struct {
+	Pct     int // 10/25/50/100
+	StopIdx int // 0..3, slider position matching Pct
+}
+
+// deployVersionOption is one selectable radio in the Deploy modal.
+type deployVersionOption struct {
+	Version string // v1/v2/v3
+	Checked bool
+}
+
+// deployModalView is the view model for the Deploy modal fragment.
+type deployModalView struct {
+	Versions []deployVersionOption
+	Ramp     rampView
+}
+
+// stopIndex returns the index of pct in rampStops, or 0 when pct is not a stop.
+func stopIndex(pct int) int {
+	for i, stop := range rampStops {
+		if stop == pct {
+			return i
+		}
+	}
+	return 0
+}
+
+// rampViewFor returns the ramp slider state for the selected version, derived
+// from its deployment-card status: a Ramping version keeps its in-progress
+// percentage, the Current version is 100%, and any other version defaults to
+// 10% (the start of a new ramp).
+func rampViewFor(state DashboardState, selected string) rampView {
+	pct := rampDefaultPct
+	for _, c := range state.Versions {
+		if c.Version != selected {
+			continue
+		}
+		switch c.Status {
+		case StatusRamping:
+			pct = c.TrafficPct
+		case StatusCurrent:
+			pct = rampFullPct
+		}
+		break
+	}
+	return rampView{Pct: pct, StopIdx: stopIndex(pct)}
+}
+
+// defaultDeploySelection picks the version pre-selected when the modal opens:
+// the Ramping version if a ramp is in progress, else the Current version, else
+// the first card ("" when there are no versions).
+func defaultDeploySelection(state DashboardState) string {
+	var current, first string
+	for i, c := range state.Versions {
+		if i == 0 {
+			first = c.Version
+		}
+		switch c.Status {
+		case StatusRamping:
+			return c.Version
+		case StatusCurrent:
+			current = c.Version
+		}
+	}
+	if current != "" {
+		return current
+	}
+	return first
+}
+
+// buildDeployModalView builds the Deploy modal view model from the live state.
+// The pre-selected version follows defaultDeploySelection, and the ramp slider
+// reflects that version's status via rampViewFor.
+func buildDeployModalView(state DashboardState) deployModalView {
+	selected := defaultDeploySelection(state)
+	options := make([]deployVersionOption, 0, len(state.Versions))
+	for _, c := range state.Versions {
+		options = append(options, deployVersionOption{Version: c.Version, Checked: c.Version == selected})
+	}
+	return deployModalView{Versions: options, Ramp: rampViewFor(state, selected)}
+}
+
 // Renderer renders named dashboard regions to HTML from a DashboardState.
 type Renderer struct {
 	tmpl *template.Template
@@ -52,6 +145,22 @@ func (r *Renderer) Region(w io.Writer, name string, state DashboardState) error 
 func (r *Renderer) Toast(w io.Writer, message string) error {
 	if err := r.tmpl.ExecuteTemplate(w, "toast", recoverResult{Message: message}); err != nil {
 		return fmt.Errorf("render toast: %w", err)
+	}
+	return nil
+}
+
+// DeployModal renders the full Deploy modal fragment for the given view.
+func (r *Renderer) DeployModal(w io.Writer, view deployModalView) error {
+	if err := r.tmpl.ExecuteTemplate(w, "deploy-modal", view); err != nil {
+		return fmt.Errorf("render deploy modal: %w", err)
+	}
+	return nil
+}
+
+// DeployRamp renders just the ramp section, for re-rendering on version change.
+func (r *Renderer) DeployRamp(w io.Writer, view rampView) error {
+	if err := r.tmpl.ExecuteTemplate(w, "deploy-ramp", view); err != nil {
+		return fmt.Errorf("render deploy ramp: %w", err)
 	}
 	return nil
 }
