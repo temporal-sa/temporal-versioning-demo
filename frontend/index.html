@@ -283,15 +283,15 @@
         @apply border-[#5b1d1d] bg-[#1a1416];
       }
 
-      /* Hover lift + neutral ring (outline, not box-shadow) so it stays layout-free;
-         scoped out of Done so it never fights the collapse. */
-      .order:hover:not(.done) {
+      /* Hover lift + neutral ring (outline) so it stays layout-free. Applies to
+         every order, including Done while it is still visible before collapse. */
+      .order:hover {
         @apply -translate-y-[2px] border-[#33333c] bg-[#1c1c22] outline-[#4a4a52]
           shadow-[0_6px_18px_rgba(0,0,0,0.35)];
       }
 
       /* Keep the red identity on hover for a failed card. */
-      .order.fail:hover:not(.done) {
+      .order.fail:hover {
         @apply -translate-y-[2px] border-[#7a2a2a] bg-[#241a1c] shadow-[0_6px_18px_rgba(0,0,0,0.35)];
       }
 
