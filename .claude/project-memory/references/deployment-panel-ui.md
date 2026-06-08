@@ -19,6 +19,12 @@ idiomorph morphs only changed attributes in place. **Rollback is `disabled`
 unless a version is currently Ramping** — gated server-side via the
 `hasRamping([]VersionCard)` funcMap helper (`{{if not (hasRamping .Versions)}}
 disabled{{end}}`), since rollback only makes sense while a ramp is in flight.
+**Recover is `disabled` unless at least one live order is failing** — gated the
+same way via `hasFailing([]Order)` (`{{if not (hasFailing .Orders)}}
+disabled{{end}}`); since the controls frame carries the full `DashboardState`
+(Orders included), the button enables/disables live as orders enter/leave the
+retrying state. (`Order.Failing` is the only "in error" signal — orders never
+reach Failed; see the no-failure-count rule below.)
 
 Each version card is sorted **v1 → v2 → v3** and shows only an in-progress
 count: `{{.PinnedCount}} in flight`. Version cards deliberately show **no

@@ -194,6 +194,7 @@ func funcMap() template.FuncMap {
 		"stepperStyle": stepperStyle,
 		"barWidth":     barWidth,
 		"hasRamping":   hasRamping,
+		"hasFailing":   hasFailing,
 	}
 }
 
@@ -202,6 +203,18 @@ func funcMap() template.FuncMap {
 func hasRamping(versions []VersionCard) bool {
 	for _, c := range versions {
 		if c.Status == StatusRamping {
+			return true
+		}
+	}
+	return false
+}
+
+// hasFailing reports whether any live order is currently failing (its current
+// step is erroring/retrying). The controls template uses it to enable the
+// Recover button only while at least one order is in error.
+func hasFailing(orders []Order) bool {
+	for _, o := range orders {
+		if o.Failing {
 			return true
 		}
 	}
