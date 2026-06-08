@@ -157,19 +157,28 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]str
 	labelToBuild = map[string]string{}
 	for i, s := range sorted {
 		buildID := s.Version.BuildID
-		labelVal, cached := a.cachedLabel(buildID)
-		if !cached {
-			if v, ferr := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); ferr == nil && v != "" {
-				a.cacheLabel(buildID, v)
-				labelVal = v
-			}
-		}
+		labelVal := a.resolveLabel(ctx, buildID)
 		if labelVal == "" {
 			labelVal = friendly(i) // CreateTime fallback (oldest = v1)
 		}
 		labelToBuild[labelVal] = buildID
 	}
 	return labelToBuild, nil
+}
+
+// resolveLabel returns a build's friendly pizzaVersion label from metadata:
+// the cached value first, otherwise a fresh fetch (which it caches). It returns
+// "" when no metadata label is published, leaving any CreateTime-order fallback
+// to the caller, which alone knows the build's position in CreateTime order.
+func (a *Actions) resolveLabel(ctx context.Context, buildID string) string {
+	if v, cached := a.cachedLabel(buildID); cached {
+		return v
+	}
+	if v, err := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); err == nil && v != "" {
+		a.cacheLabel(buildID, v)
+		return v
+	}
+	return ""
 }
 
 // metadataLabels resolves a buildID→label map using version metadata only (no
@@ -438,8 +447,55 @@ func (a *Actions) firstWorkflowTaskCompletedID(ctx context.Context, exec *common
 	return 0, fmt.Errorf("no WorkflowTaskCompleted event for %s", exec.GetWorkflowId())
 }
 
-// targetAndCurrent resolves the target build (ramping if set, else newest
-// non-current by CreateTime) and the current build from the live routing config.
+// targetCandidate is a build considered as the recover target, paired with its
+// resolved friendly version label (e.g. "v3").
+type targetCandidate struct {
+	buildID string
+	label   string // friendly version label, e.g. "v3"
+}
+
+// selectTargetBuild picks the build to recover stuck orders FROM: the ramping
+// build if one is set, otherwise the non-current build with the highest
+// friendly version number (v3 > v2 > v1). Version NUMBER — not CreateTime — is
+// used because worker version registration order does not match semantic
+// version order (notably in local dev, where v1/v2/v3 register concurrently).
+//
+// Ties and unparseable labels are made deterministic by falling back to a
+// build-ID comparison, so the result is total and independent of input order.
+func selectTargetBuild(ramping, current string, candidates []targetCandidate) (string, error) {
+	if ramping != "" {
+		return ramping, nil
+	}
+
+	best := ""
+	bestLabel := ""
+	for _, c := range candidates {
+		if c.buildID == current {
+			continue
+		}
+		if best == "" || higherVersion(c, targetCandidate{buildID: best, label: bestLabel}) {
+			best, bestLabel = c.buildID, c.label
+		}
+	}
+	if best == "" {
+		return "", ErrNoTargetVersion
+	}
+	return best, nil
+}
+
+// higherVersion reports whether candidate a outranks b by friendly version
+// number, breaking ties (or unparseable labels) on build ID so selection is
+// deterministic regardless of input order.
+func higherVersion(a, b targetCandidate) bool {
+	if a.label != b.label {
+		return lessVersion(b.label, a.label)
+	}
+	return a.buildID > b.buildID
+}
+
+// targetAndCurrent resolves the target build (ramping if set, else the highest
+// friendly version number that is not current) and the current build from the
+// live routing config.
 func (a *Actions) targetAndCurrent(ctx context.Context) (target, current string, err error) {
 	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
@@ -450,19 +506,32 @@ func (a *Actions) targetAndCurrent(ctx context.Context) (target, current string,
 	if rc.CurrentVersion != nil {
 		current = rc.CurrentVersion.BuildID
 	}
+	ramping := ""
 	if rc.RampingVersion != nil {
-		return rc.RampingVersion.BuildID, current, nil
+		ramping = rc.RampingVersion.BuildID
 	}
 
-	// No ramp: target the newest version summary that is not the current build.
-	summaries := slices.Clone(resp.Info.VersionSummaries)
-	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].CreateTime.After(summaries[j].CreateTime)
-	})
-	for _, s := range summaries {
-		if s.Version.BuildID != current {
-			return s.Version.BuildID, current, nil
+	candidates := a.targetCandidates(ctx, resp.Info.VersionSummaries)
+	target, err = selectTargetBuild(ramping, current, candidates)
+	return target, current, err
+}
+
+// targetCandidates resolves each version summary to a friendly label, mirroring
+// versionIndex: metadata first (cached or fetched), then a CreateTime-order
+// fallback (oldest = v1) using the same CreateTime sort as versionIndex so the
+// fallback indexing matches.
+func (a *Actions) targetCandidates(ctx context.Context, summaries []client.WorkerDeploymentVersionSummary) []targetCandidate {
+	sorted := slices.Clone(summaries)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
+
+	candidates := make([]targetCandidate, 0, len(sorted))
+	for i, s := range sorted {
+		buildID := s.Version.BuildID
+		label := a.resolveLabel(ctx, buildID)
+		if label == "" {
+			label = friendly(i) // CreateTime fallback (oldest = v1)
 		}
+		candidates = append(candidates, targetCandidate{buildID: buildID, label: label})
 	}
-	return "", current, ErrNoTargetVersion
+	return candidates
 }

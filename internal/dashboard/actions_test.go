@@ -104,6 +104,60 @@ func TestRecoverQueryFor(t *testing.T) {
 	}
 }
 
+func TestSelectTargetBuild(t *testing.T) {
+	tests := []struct {
+		name       string
+		ramping    string
+		current    string
+		candidates []targetCandidate
+		want       string
+		wantErr    error
+	}{
+		{
+			name:    "ramping build wins and ignores candidates",
+			ramping: "ramp-build",
+			current: "v1-local",
+			candidates: []targetCandidate{
+				{buildID: "v3-local", label: "v3"},
+			},
+			want: "ramp-build",
+		},
+		{
+			// Regression: a CreateTime heuristic would pick whatever sorts first
+			// here (v2-local), but the highest friendly version number is v3.
+			name:    "no ramp picks highest version number not slice order",
+			current: "v1-local",
+			candidates: []targetCandidate{
+				{buildID: "v2-local", label: "v2"},
+				{buildID: "v1-local", label: "v1"},
+				{buildID: "v3-local", label: "v3"},
+			},
+			want: "v3-local",
+		},
+		{
+			name:    "all candidates equal current yields ErrNoTargetVersion",
+			current: "v1-local",
+			candidates: []targetCandidate{
+				{buildID: "v1-local", label: "v1"},
+			},
+			wantErr: ErrNoTargetVersion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := selectTargetBuild(tt.ramping, tt.current, tt.candidates)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("selectTargetBuild = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestActionsLabelCacheConcurrent hammers the labelCache helpers from many
 // goroutines so `go test -race` flags any regression that drops the mutex guard.
 func TestActionsLabelCacheConcurrent(t *testing.T) {
