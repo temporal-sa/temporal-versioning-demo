@@ -1,8 +1,8 @@
 package dashboard
 
 import (
+	"cmp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,29 +23,29 @@ const (
 
 // Order is one live order card.
 type Order struct {
-	ID          string            `json:"id"`
-	Version     string            `json:"version"` // friendly: v1/v2/v3
-	Pizza       string            `json:"pizza"`
-	Steps       []pizza.StepLabel `json:"steps"`
-	CurrentStep int               `json:"currentStep"`
-	Failing     bool              `json:"failing"`
-	Done        bool              `json:"done"`
-	ElapsedSec  int               `json:"elapsedSec"`
+	ID          string
+	Version     string // friendly: v1/v2/v3
+	Pizza       string
+	Steps       []pizza.StepLabel
+	CurrentStep int
+	Failing     bool
+	Done        bool
+	ElapsedSec  int
 }
 
 // VersionCard is one deployment-panel card.
 type VersionCard struct {
-	Version     string        `json:"version"` // friendly: v1/v2/v3
-	BuildID     string        `json:"buildId"`
-	Status      VersionStatus `json:"status"`
-	TrafficPct  int           `json:"trafficPct"`
-	PinnedCount int           `json:"pinnedCount"`
+	Version     string // friendly: v1/v2/v3
+	BuildID     string
+	Status      VersionStatus
+	TrafficPct  int
+	PinnedCount int
 }
 
 // DashboardState is the full SSE payload.
 type DashboardState struct {
-	Orders   []Order       `json:"orders"`
-	Versions []VersionCard `json:"versions"`
+	Orders   []Order
+	Versions []VersionCard
 }
 
 // VersionSummary mirrors the fields BuildState needs from a Temporal version summary.
@@ -78,7 +78,7 @@ type LiveOrder struct {
 // states correct while workers publish their metadata.
 func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder) DashboardState {
 	sorted := slices.Clone(summaries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
+	slices.SortFunc(sorted, func(a, b VersionSummary) int { return a.CreateTime.Compare(b.CreateTime) })
 
 	// Label by version metadata when present; otherwise fall back to CreateTime
 	// order (oldest = v1). Per-version override keeps mixed states correct while
@@ -139,23 +139,23 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 	// after the leading "v" so the ordering is numeric rather than fragile
 	// lexicographic; fall back to a plain string compare when either label does
 	// not parse. A stable sort keeps the CreateTime order for ties.
-	sort.SliceStable(cards, func(i, j int) bool {
-		return lessVersion(cards[i].Version, cards[j].Version)
+	slices.SortStableFunc(cards, func(a, b VersionCard) int {
+		return compareVersion(a.Version, b.Version)
 	})
 
 	return DashboardState{Orders: outOrders, Versions: cards}
 }
 
-// lessVersion orders friendly version labels (v1 < v2 < v3) by the integer after
-// the leading "v". If either label does not parse, it falls back to a plain
+// compareVersion orders friendly version labels (v1 < v2 < v3) by the integer
+// after the leading "v". If either label does not parse, it falls back to a plain
 // string comparison so the order stays deterministic.
-func lessVersion(a, b string) bool {
+func compareVersion(a, b string) int {
 	na, errA := strconv.Atoi(strings.TrimPrefix(a, "v"))
 	nb, errB := strconv.Atoi(strings.TrimPrefix(b, "v"))
 	if errA != nil || errB != nil {
-		return a < b
+		return strings.Compare(a, b)
 	}
-	return na < nb
+	return cmp.Compare(na, nb)
 }
 
 func friendly(i int) string {

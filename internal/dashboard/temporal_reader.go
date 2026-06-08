@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
@@ -96,8 +96,8 @@ func (r *SDKReader) OpenOrders(ctx context.Context) ([]LiveOrder, error) {
 	// Sort oldest-first in Go for stable, jump-free rendering: new orders append at
 	// the end instead of pushing every card down. The standard visibility store does
 	// not support ORDER BY, so ordering cannot be pushed into the query.
-	sort.Slice(resp.Executions, func(i, j int) bool {
-		return resp.Executions[i].GetStartTime().AsTime().Before(resp.Executions[j].GetStartTime().AsTime())
+	slices.SortFunc(resp.Executions, func(a, b *workflow.WorkflowExecutionInfo) int {
+		return a.GetStartTime().AsTime().Compare(b.GetStartTime().AsTime())
 	})
 
 	// Keep the newest maxOrdersPerTick orders: since the slice is oldest-first, those

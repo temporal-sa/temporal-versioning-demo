@@ -122,7 +122,7 @@ func publishVersionLabel(
 			UpsertEntries: map[string]any{"pizzaVersion": version},
 		},
 	}
-	for attempt := 0; attempt < 12; attempt++ {
+	for range 12 {
 		_, err := h.UpdateVersionMetadata(ctx, opts)
 		if err == nil {
 			logger.Info("published version metadata", "buildID", buildID, "pizzaVersion", version)

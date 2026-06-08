@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
 )
 
 const (
@@ -176,7 +178,7 @@ func (s *Server) handleClose(w http.ResponseWriter, _ *http.Request) {
 }
 
 // validVersion guards the friendly labels the UI may send.
-func validVersion(v string) bool { return v == "v1" || v == "v2" || v == "v3" }
+func validVersion(v string) bool { _, ok := pizza.ParseVersion(v); return ok }
 
 // handleDeploy applies the modal's selection: ramping to the chosen stop, or
 // promoting the version to Current at 100%. On success it returns an empty 200

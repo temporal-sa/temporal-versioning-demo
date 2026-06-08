@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 
@@ -19,9 +18,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
-
-// ErrNoTargetVersion is returned when no non-current version exists to act on.
-var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promote")
 
 // ErrUnknownVersion is returned when the UI asks to act on a version label that
 // is not registered in the deployment.
@@ -128,13 +124,17 @@ func (a *Actions) versionIndex(ctx context.Context) (labelToBuild map[string]str
 		return nil, fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
 
+	buildToLabel := a.metadataLabelMap(ctx, resp.Info.VersionSummaries)
+
 	sorted := slices.Clone(resp.Info.VersionSummaries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
+	slices.SortFunc(sorted, func(a, b client.WorkerDeploymentVersionSummary) int {
+		return a.CreateTime.Compare(b.CreateTime)
+	})
 
 	labelToBuild = map[string]string{}
 	for i, s := range sorted {
 		buildID := s.Version.BuildID
-		labelVal := a.resolveLabel(ctx, buildID)
+		labelVal := buildToLabel[buildID]
 		if labelVal == "" {
 			labelVal = friendly(i) // CreateTime fallback (oldest = v1)
 		}
@@ -170,21 +170,25 @@ func (a *Actions) metadataLabels(ctx context.Context) (buildToLabel map[string]s
 	if rc := resp.Info.RoutingConfig; rc.CurrentVersion != nil {
 		current = rc.CurrentVersion.BuildID
 	}
-	buildToLabel = map[string]string{}
-	for _, s := range resp.Info.VersionSummaries {
+	return a.metadataLabelMap(ctx, resp.Info.VersionSummaries), current, nil
+}
+
+// metadataLabelMap resolves each summary's metadata label (cache-or-fetch via
+// resolveLabel) and returns a buildID→label map, omitting builds with no published
+// label. It is the shared loop behind versionIndex and metadataLabels; only the
+// caller decides what to do with unlabelled builds (CreateTime fallback vs. omit).
+func (a *Actions) metadataLabelMap(
+	ctx context.Context,
+	summaries []client.WorkerDeploymentVersionSummary,
+) map[string]string {
+	buildToLabel := map[string]string{}
+	for _, s := range summaries {
 		buildID := s.Version.BuildID
-		label, cached := a.cachedLabel(buildID)
-		if !cached {
-			if v, ferr := fetchVersionLabel(ctx, a.c, a.deploymentName, buildID); ferr == nil && v != "" {
-				a.cacheLabel(buildID, v)
-				label = v
-			}
-		}
-		if label != "" {
+		if label := a.resolveLabel(ctx, buildID); label != "" {
 			buildToLabel[buildID] = label
 		}
 	}
-	return buildToLabel, current, nil
+	return buildToLabel
 }
 
 // bootstrapBuildID returns the Build ID labelled v1 from a buildID→label map,
@@ -218,7 +222,7 @@ const (
 //   - a Current version already exists -> skip (keeps the manual ramp/promote/
 //     rollback flow untouched, even if a newer target also exists);
 //   - no Current and a target is ready -> promote that target;
-//   - otherwise (ErrNoTargetVersion, describe error, empty target) -> wait.
+//   - otherwise (describe error, empty target) -> wait.
 func decideBootstrap(target, current string, err error) (bootstrapDecision, string) {
 	if current != "" {
 		return bootstrapSkip, ""

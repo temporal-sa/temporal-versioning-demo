@@ -26,10 +26,10 @@ func TestDecideBootstrap(t *testing.T) {
 			wantDecision: bootstrapSkip,
 		},
 		{
-			name:         "no target version waits",
+			name:         "no target no current no error waits",
 			target:       "",
 			current:      "",
-			err:          ErrNoTargetVersion,
+			err:          nil,
 			wantDecision: bootstrapWait,
 		},
 		{
