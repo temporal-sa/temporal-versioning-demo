@@ -151,8 +151,10 @@
         @apply flex shrink-0 items-center gap-3 border-b border-divider bg-surface px-[18px] py-[15px];
       }
 
+      /* Title links to the home page; reset the anchor's default underline and
+         color so it looks identical to the previous plain heading. */
       .top .logo {
-        @apply flex items-center gap-2 text-[17px] font-extrabold;
+        @apply flex items-center gap-2 text-[17px] font-extrabold text-inherit no-underline;
       }
 
       .top .logo .logo-icon {
@@ -570,7 +572,7 @@
   <body hx-ext="sse,response-targets,morph">
     <div class="app" sse-connect="/events">
       <header class="top">
-        <div class="logo">
+        <a class="logo" href="/" aria-label="Pizza Tracker home">
           <svg class="logo-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"
                xmlns="http://www.w3.org/2000/svg">
             <g fill="#e8923a" stroke="#f4c542" stroke-width="1.4" stroke-linejoin="round">
@@ -587,7 +589,7 @@
             </g>
           </svg>
           <span>Pizza Tracker</span>
-        </div>
+        </a>
         <div class="attribution">
           <span>Workflow Versioning by</span>
           <img src="https://images.ctfassets.net/0uuz8ydxyd9p/2ctnUPEhKA75tYnrl2Kzvj/90563965bc4ea2af9442b6eb4ba43180/Temporal_LogoLockup_Horizontal_light_1_2x.png"
