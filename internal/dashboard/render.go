@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strconv"
 )
 
 //go:embed templates/*.tmpl
@@ -60,6 +61,17 @@ func stopIndex(pct int) int {
 		}
 	}
 	return 0
+}
+
+// rampViewForStop returns the ramp slider state for an explicitly chosen stop
+// index (the slider's own value). It clamps any invalid or out-of-range input
+// to the first stop, so a malformed query never escapes the 10/25/50/100 set.
+func rampViewForStop(stop string) rampView {
+	idx, err := strconv.Atoi(stop)
+	if err != nil || idx < 0 || idx >= len(rampStops) {
+		idx = 0
+	}
+	return rampView{Pct: rampStops[idx], StopIdx: idx}
 }
 
 // rampViewFor returns the ramp slider state for the selected version, derived
@@ -153,6 +165,14 @@ func (r *Renderer) Toast(w io.Writer, message string) error {
 func (r *Renderer) DeployModal(w io.Writer, view deployModalView) error {
 	if err := r.tmpl.ExecuteTemplate(w, "deploy-modal", view); err != nil {
 		return fmt.Errorf("render deploy modal: %w", err)
+	}
+	return nil
+}
+
+// RollbackModal renders the rollback confirmation modal scrim (no data).
+func (r *Renderer) RollbackModal(w io.Writer) error {
+	if err := r.tmpl.ExecuteTemplate(w, "rollback-modal", nil); err != nil {
+		return fmt.Errorf("render rollback modal: %w", err)
 	}
 	return nil
 }

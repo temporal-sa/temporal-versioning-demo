@@ -2,9 +2,29 @@ package dashboard
 
 import (
 	"bytes"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// newTestServer builds a Server with a live hub and renderer but no Temporal
+// client. It is suitable for handlers that only render fragments (deploy-ramp,
+// rollback-modal, close) and never touch s.actions.
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+	return &Server{
+		hub:      NewHub(),
+		renderer: renderer,
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
 
 func versionsState(currentLabel string, labels ...string) DashboardState {
 	cards := make([]VersionCard, 0, len(labels))
@@ -75,9 +95,9 @@ func TestRendererControls(t *testing.T) {
 
 	// Deploy and Recover always render; only Rollback's disabled attribute varies.
 	always := []string{
-		`hx-get="/api/deploy-modal"`, // Deploy
-		`onclick="openRollback()"`,   // Rollback
-		`hx-post="/api/recover"`,     // Recover
+		`hx-get="/api/deploy-modal"`,   // Deploy opens the modal host
+		`hx-get="/api/rollback-modal"`, // Rollback opens the modal host
+		`hx-post="/api/recover"`,       // Recover
 	}
 
 	t.Run("rollback disabled without a ramp", func(t *testing.T) {
@@ -230,12 +250,14 @@ func TestRendererDeployModal(t *testing.T) {
 
 	want := []string{
 		`id="deploy-ramp"`,
-		`value="v2" checked`,                   // Current version pre-checked
-		`hx-get="/api/deploy-ramp?version=v1"`, // radios drive the ramp re-render
-		`hx-get="/api/deploy-ramp?version=v3"`,
-		`100%`,      // Current => 100% ramp
-		`value="3"`, // slider at stop index 3
-		`onclick="applyDeploy()"`,
+		`class="modal-scrim"`,       // full scrim is now part of the fragment
+		`name="version"`,            // radios post the version field
+		`value="v2" checked`,        // Current version pre-checked
+		`hx-get="/api/deploy-ramp"`, // radios drive the ramp re-render (no ?version=)
+		`hx-post="/api/deploy"`,     // the form submits to the unified deploy endpoint
+		`type="submit"`,             // Apply is a real submit button
+		`100%`,                      // Current => 100% ramp
+		`value="3"`,                 // slider at stop index 3
 	}
 	for _, w := range want {
 		if !strings.Contains(out, w) {
@@ -244,6 +266,14 @@ func TestRendererDeployModal(t *testing.T) {
 	}
 	if strings.Contains(out, `value="v1" checked`) || strings.Contains(out, `value="v3" checked`) {
 		t.Errorf("only the Current version should be checked\n--- output ---\n%s", out)
+	}
+	if strings.Contains(out, `?version=`) {
+		t.Errorf("radio hx-get must not carry a version query string\n--- output ---\n%s", out)
+	}
+	for _, js := range []string{"onclick", "oninput", "hx-on"} {
+		if strings.Contains(out, js) {
+			t.Errorf("deploy modal must be JS-free but contains %q\n--- output ---\n%s", js, out)
+		}
 	}
 }
 
@@ -276,5 +306,88 @@ func TestRendererDeployRamp(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRampViewForStop(t *testing.T) {
+	tests := []struct {
+		name        string
+		stop        string
+		wantPct     int
+		wantStopIdx int
+	}{
+		{"stop 0 -> 10% at idx 0", "0", 10, 0},
+		{"stop 3 -> 100% at idx 3", "3", 100, 3},
+		{"out of range -> 10% at idx 0", "9", 10, 0},
+		{"empty -> 10% at idx 0", "", 10, 0},
+		{"non-numeric -> 10% at idx 0", "x", 10, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rampViewForStop(tt.stop)
+			if got.Pct != tt.wantPct || got.StopIdx != tt.wantStopIdx {
+				t.Errorf("rampViewForStop(%q) = %+v, want Pct=%d StopIdx=%d",
+					tt.stop, got, tt.wantPct, tt.wantStopIdx)
+			}
+		})
+	}
+}
+
+func TestRendererRollbackModal(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := r.RollbackModal(&buf); err != nil {
+		t.Fatalf("RollbackModal: %v", err)
+	}
+	out := buf.String()
+	for _, w := range []string{`class="modal-scrim"`, `Roll back?`, `hx-post="/api/rollback"`} {
+		if !strings.Contains(out, w) {
+			t.Errorf("rollback modal output missing %q\n--- output ---\n%s", w, out)
+		}
+	}
+}
+
+func TestHandleClose(t *testing.T) {
+	s := newTestServer(t)
+	rec := httptest.NewRecorder()
+	s.handleClose(rec, httptest.NewRequest(http.MethodGet, "/api/close", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("body should be empty so #modal-host is cleared, got %q", rec.Body.String())
+	}
+}
+
+func TestHandleRollbackModal(t *testing.T) {
+	s := newTestServer(t)
+	rec := httptest.NewRecorder()
+	s.handleRollbackModal(rec, httptest.NewRequest(http.MethodGet, "/api/rollback-modal", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "Roll back?") {
+		t.Errorf("rollback modal should contain the confirmation prompt\n--- body ---\n%s", rec.Body.String())
+	}
+}
+
+func TestHandleDeployRampWithStop(t *testing.T) {
+	s := newTestServer(t)
+	rec := httptest.NewRecorder()
+	s.handleDeployRamp(rec, httptest.NewRequest(http.MethodGet, "/api/deploy-ramp?stop=3", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	out := rec.Body.String()
+	for _, w := range []string{`id="deploy-ramp"`, `100%`, `value="3"`} {
+		if !strings.Contains(out, w) {
+			t.Errorf("deploy ramp output missing %q\n--- body ---\n%s", w, out)
+		}
 	}
 }

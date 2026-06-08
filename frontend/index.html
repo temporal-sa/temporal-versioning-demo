@@ -509,10 +509,6 @@
         @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60;
       }
 
-      .modal-scrim[hidden] {
-        @apply hidden;
-      }
-
       .modal {
         @apply w-[360px] rounded-2xl border border-line bg-surface p-7;
       }
@@ -612,132 +608,20 @@
       </div>
     </div>
 
-    <!-- Deploy modal scrim: the backdrop + Escape-to-close target. The modal
-         itself is rendered server-side: the Deploy button GETs /api/deploy-modal
-         into #deploy-modal-content, then openDeploy() reveals this scrim after a
-         successful response. The
-         scrim is STATIC (outside every sse-swap region) so SSE frames never touch
-         it. The modal's own actions POST via fetch (see the deploy script below),
-         not htmx, and any error fragment is shown in #toast. -->
-    <div id="deploy-modal" class="modal-scrim" hidden>
-      <div id="deploy-modal-content"></div>
-    </div>
-
-    <!-- Rollback confirm modal: rollback is destructive, so it asks first.
-         Reuses the modal classes; Confirm posts /api/rollback via fetch. -->
-    <div id="rollback-modal" class="modal-scrim" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Confirm rollback">
-        <h3>Roll back?</h3>
-        <p class="modal-note">This reverts traffic to the previously Current version.</p>
-        <div class="modal-acts">
-          <button class="btn" type="button" onclick="closeRollback()">Cancel</button>
-          <button class="btn danger" type="button" onclick="confirmRollback()">Roll back</button>
-        </div>
-      </div>
-    </div>
+    <!-- Single modal host. A modal is open when the server has swapped a
+         .modal-scrim fragment in here, closed when it is emptied — no JS, no
+         hidden toggling. Deploy/Rollback (in the controls row) GET their modal
+         fragment into this host; Cancel and Escape GET /api/close to clear it.
+         The Deploy form posts /api/deploy and the server decides promote vs
+         ramp; success returns an empty 200 that clears the host (closing the
+         modal), while errors route to #toast (response-targets) so the modal
+         stays open. The host sits outside every sse-swap region, so SSE frames
+         never touch it. -->
+    <div id="modal-host"></div>
 
     <!-- Action results and errors are swapped here as toast fragments. The
          Deploy/Rollback/Recover buttons live in the Deployment column controls
-         row; Deploy/Rollback post via fetch and Recover posts via htmx. All
-         surface error responses here via #toast. -->
+         row; all surface error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
-
-    <!-- Deploy modal behavior.
-
-         The modal is rendered server-side and driven by HTMX:
-           - Deploy button GETs /api/deploy-modal -> swaps the fragment into
-             #deploy-modal-content, then openDeploy() reveals the scrim after a
-             successful response. The server pre-checks the Current version and
-             sets the default ramp.
-           - Each version radio GETs /api/deploy-ramp?version=vX -> re-renders
-             just the #deploy-ramp section (100% for Current, else 10%).
-         The scrim is static markup (outside every sse-swap region), so SSE
-         frames never touch it. The modal's Apply/rollback actions still POST via
-         fetch rather than htmx:
-           - Apply at 100% -> /api/promote (version), otherwise -> /api/ramp.
-           - Rollback (from the controls row) -> /api/rollback.
-         On success the modal closes; on error the response body (a toast HTML
-         fragment) is shown in #toast. The slider snaps to 4 reachable stops, and
-         onRampSlide only updates the live label while dragging. -->
-    <script>
-      (function () {
-        "use strict";
-
-        var STOPS = [10, 25, 50, 100];
-
-        function modal() {
-          return document.getElementById("deploy-modal");
-        }
-
-        window.openDeploy = function () {
-          var m = modal();
-          if (m) m.hidden = false;
-        };
-
-        window.closeDeploy = function () {
-          var m = modal();
-          if (m) m.hidden = true;
-        };
-
-        window.onRampSlide = function (idx) {
-          var pct = STOPS[parseInt(idx, 10)] || 10;
-          var out = document.getElementById("deploy-pct");
-          if (out) out.textContent = pct + "%";
-        };
-
-        function showToast(html) {
-          var t = document.getElementById("toast");
-          if (t) t.innerHTML = html;
-        }
-
-        function post(url, body, onOk) {
-          return fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: body,
-          }).then(function (r) {
-            if (!r.ok) return r.text().then(showToast);
-            if (onOk) onOk();
-          });
-        }
-
-        window.applyDeploy = function () {
-          var v = document.querySelector('input[name="deploy-version"]:checked');
-          var s = document.getElementById("deploy-slider");
-          if (!v || !s) return;
-          var pct = STOPS[parseInt(s.value, 10)] || 10;
-          if (pct === 100) {
-            post("/api/promote", "version=" + encodeURIComponent(v.value), window.closeDeploy);
-          } else {
-            post("/api/ramp", "version=" + encodeURIComponent(v.value) + "&percentage=" + pct, window.closeDeploy);
-          }
-        };
-
-        window.openRollback = function () {
-          var m = document.getElementById("rollback-modal");
-          if (m) m.hidden = false;
-        };
-
-        window.closeRollback = function () {
-          var m = document.getElementById("rollback-modal");
-          if (m) m.hidden = true;
-        };
-
-        window.confirmRollback = function () {
-          post("/api/rollback", "", window.closeRollback);
-        };
-
-        document.addEventListener("keydown", function (e) {
-          if (e.key !== "Escape") return;
-          var d = modal();
-          if (d && !d.hidden) {
-            window.closeDeploy();
-            return;
-          }
-          var rb = document.getElementById("rollback-modal");
-          if (rb && !rb.hidden) window.closeRollback();
-        });
-      })();
-    </script>
   </body>
 </html>

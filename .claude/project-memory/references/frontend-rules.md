@@ -21,6 +21,15 @@ Durable rules for the Pizza Tracker SPA:
 - **SSE pushes server-rendered HTML, not JSON.** Named SSE events are swapped by
   HTMX into `sse-swap` targets; actions are `hx-post`; errors/toasts use
   response-targets into `#toast`.
+- **Zero application JavaScript — all interactivity is HTMX.** There is no
+  `<script>` block and no `onclick`/`oninput`/`hx-on` in the UI (only the head's
+  CDN library `<script src>` includes). Modals use a single `#modal-host`
+  (swap a fragment in to open, empty 200 to close); Escape-to-close is
+  `hx-trigger="keyup[key=='Escape'] from:body"`. Do **not** reintroduce JS —
+  wire new interactions with htmx attributes + small fragment endpoints. The
+  one accepted consequence: inputs that need live value feedback (e.g. the ramp
+  slider's % label) update on `change` (server re-render), not continuously.
+  See [[deploy-modal-htmx]].
 - **Media-based variants do NOT compile via `@apply` in the Play CDN.**
   `@apply max-[760px]:…` (and other `@media`-based variants) emit *nothing* —
   verified in-browser: only an explicit raw `@media` block produces a media

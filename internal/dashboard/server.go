@@ -51,10 +51,11 @@ func (s *Server) Routes() http.Handler {
 	})
 	mux.HandleFunc("GET /events", s.handleSSE)
 	mux.HandleFunc("GET /api/deploy-modal", s.handleDeployModal)
+	mux.HandleFunc("GET /api/rollback-modal", s.handleRollbackModal)
 	mux.HandleFunc("GET /api/deploy-ramp", s.handleDeployRamp)
-	mux.HandleFunc("POST /api/ramp", s.handleRamp)
-	mux.HandleFunc("POST /api/promote", s.handlePromote)
-	mux.HandleFunc("POST /api/rollback", s.handleAction(s.actions.Rollback))
+	mux.HandleFunc("GET /api/close", s.handleClose)
+	mux.HandleFunc("POST /api/deploy", s.handleDeploy)
+	mux.HandleFunc("POST /api/rollback", s.handleRollback)
 	mux.HandleFunc("POST /api/recover", s.handleRecover)
 	mux.Handle("/", s.frontend)
 	return mux
@@ -140,10 +141,26 @@ func (s *Server) handleDeployModal(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// handleDeployRamp re-renders only the ramp section for the selected version,
-// deriving the ramp percentage from that version's deployment-card status.
+// handleRollbackModal renders the rollback confirmation modal fragment.
+func (s *Server) handleRollbackModal(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.RollbackModal(w); err != nil {
+		s.logger.Warn("render rollback modal failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Render failed: "+err.Error())
+	}
+}
+
+// handleDeployRamp re-renders only the ramp section. A "stop" query param means
+// the slider moved, so we honor the chosen stop; otherwise a radio changed and
+// we derive the ramp from the selected version's deployment-card status.
 func (s *Server) handleDeployRamp(w http.ResponseWriter, r *http.Request) {
-	view := rampViewFor(s.hub.Latest(), r.URL.Query().Get("version"))
+	q := r.URL.Query()
+	var view rampView
+	if stop := q.Get("stop"); stop != "" {
+		view = rampViewForStop(stop)
+	} else {
+		view = rampViewFor(s.hub.Latest(), q.Get("version"))
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderer.DeployRamp(w, view); err != nil {
 		s.logger.Warn("render deploy ramp failed", "err", err)
@@ -151,44 +168,61 @@ func (s *Server) handleDeployRamp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleClose empties #modal-host, closing whichever modal is open. The empty
+// 200 body (not 204) is what htmx swaps in to clear the host.
+func (s *Server) handleClose(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+}
+
 // validVersion guards the friendly labels the UI may send.
 func validVersion(v string) bool { return v == "v1" || v == "v2" || v == "v3" }
 
-func (s *Server) handleRamp(w http.ResponseWriter, r *http.Request) {
+// handleDeploy applies the modal's selection: ramping to the chosen stop, or
+// promoting the version to Current at 100%. On success it returns an empty 200
+// body (not 204, which htmx would not swap) so htmx clears #modal-host, closing
+// the modal; errors route to #toast and leave the modal open.
+func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	version := r.FormValue("version")
 	if !validVersion(version) {
 		s.writeError(w, http.StatusBadRequest, "invalid version")
 		return
 	}
-	pct, err := strconv.ParseFloat(r.FormValue("percentage"), 32)
-	if err != nil || (pct != 10 && pct != 25 && pct != 50 && pct != 100) {
-		s.writeError(w, http.StatusBadRequest, "percentage must be one of 10/25/50/100")
+	idx, err := strconv.Atoi(r.FormValue("stop"))
+	if err != nil || idx < 0 || idx >= len(rampStops) {
+		s.writeError(w, http.StatusBadRequest, "invalid ramp selection")
 		return
 	}
+	pct := rampStops[idx]
 	ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
 	defer cancel()
-	if err := s.actions.Ramp(ctx, version, float32(pct)); err != nil {
-		s.logger.Warn("ramp failed", "err", err)
-		s.writeError(w, http.StatusInternalServerError, "Ramp failed: "+err.Error())
-		return
+	if pct == rampFullPct {
+		if err := s.actions.Promote(ctx, version); err != nil {
+			s.logger.Warn("promote failed", "err", err)
+			s.writeError(w, http.StatusInternalServerError, "Promote failed: "+err.Error())
+			return
+		}
+	} else {
+		if err := s.actions.Ramp(ctx, version, float32(pct)); err != nil {
+			s.logger.Warn("ramp failed", "err", err)
+			s.writeError(w, http.StatusInternalServerError, "Ramp failed: "+err.Error())
+			return
+		}
 	}
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
-	version := r.FormValue("version")
-	if !validVersion(version) {
-		s.writeError(w, http.StatusBadRequest, "invalid version")
-		return
-	}
+// handleRollback reverts traffic to the previously Current version. Like
+// handleDeploy, success is an empty 200 body that clears #modal-host.
+func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
 	defer cancel()
-	if err := s.actions.Promote(ctx, version); err != nil {
-		s.logger.Warn("promote failed", "err", err)
-		s.writeError(w, http.StatusInternalServerError, "Promote failed: "+err.Error())
+	if err := s.actions.Rollback(ctx); err != nil {
+		s.logger.Warn("rollback failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Rollback failed: "+err.Error())
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleRecover(w http.ResponseWriter, r *http.Request) {
@@ -203,20 +237,6 @@ func (s *Server) handleRecover(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderer.Toast(w, fmt.Sprintf("Recovered %d stuck order(s)", recovered)); err != nil {
 		s.logger.Warn("render recover toast failed", "err", err)
-	}
-}
-
-// handleAction wraps a zero-arg action that returns only an error.
-func (s *Server) handleAction(action func(context.Context) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), routingTimeout)
-		defer cancel()
-		if err := action(ctx); err != nil {
-			s.logger.Warn("action failed", "err", err)
-			s.writeError(w, http.StatusInternalServerError, "Action failed: "+err.Error())
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
