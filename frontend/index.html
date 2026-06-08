@@ -274,25 +274,23 @@
 
       /* ===== Order card + stepper ===== */
       .order {
-        @apply mb-3 max-h-[600px] animate-card-in rounded-xl border border-edge bg-surface p-[13px_14px]
-          outline-offset-2 [outline:1.5px_solid_transparent]
-          transition-[background-color,border-color,transform,box-shadow,outline-color] duration-[180ms];
+        @apply mb-3 max-h-[600px] animate-card-in rounded-xl border-2 border-edge bg-surface p-[13px_14px]
+          transition-[border-color,background-color] duration-[180ms];
       }
 
       .order.fail {
         @apply border-[#5b1d1d] bg-[#1a1416];
       }
 
-      /* Hover lift + neutral ring (outline) so it stays layout-free. Applies to
-         every order, including Done while it is still visible before collapse. */
+      /* Hover changes only the border colour — no lift/displacement, no ring,
+         no shadow. Applies to every order, Done included. */
       .order:hover {
-        @apply -translate-y-[2px] border-[#33333c] bg-[#1c1c22] outline-[#4a4a52]
-          shadow-[0_6px_18px_rgba(0,0,0,0.35)];
+        @apply border-[#9a9a9a];
       }
 
       /* Keep the red identity on hover for a failed card. */
       .order.fail:hover {
-        @apply -translate-y-[2px] border-[#7a2a2a] bg-[#241a1c] shadow-[0_6px_18px_rgba(0,0,0,0.35)];
+        @apply border-red;
       }
 
       /* Done → visible-then-collapse with no JS: full for 4s, then card-collapse
