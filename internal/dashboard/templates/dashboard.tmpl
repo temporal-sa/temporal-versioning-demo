@@ -5,26 +5,6 @@
 <span class="vb {{versionClass .}}">{{.}}</span>
 {{- end -}}
 
-{{- define "kpis" -}}
-<div class="kpi">
-  <div class="l">In flight</div>
-  <div class="v">{{.KPIs.InFlight}}</div>
-</div>
-<div class="kpi">
-  <div class="l">Current</div>
-  <div class="v">{{if .KPIs.CurrentVersion}}{{template "badge" .KPIs.CurrentVersion}}{{else}}—{{end}}</div>
-</div>
-<div class="kpi{{if not .KPIs.RampingVersion}} empty{{end}}">
-  <div class="l">Ramping</div>
-  <div class="v">
-    {{- if .KPIs.RampingVersion}}{{template "badge" .KPIs.RampingVersion}} <span class="pct">{{.KPIs.RampingPct}}%</span>{{else}}&nbsp;{{end -}}
-  </div>
-</div>
-<div class="kpi-act">
-  <button class="btn primary" type="button" onclick="openDeploy()">Deploy</button>
-</div>
-{{- end -}}
-
 {{- define "order" -}}
 <div class="order{{if .Failing}} fail{{end}}{{if .Done}} done{{end}}" id="order-{{.ID}}">
   <div class="oh">
@@ -46,34 +26,22 @@
 {{- end -}}
 
 {{- define "version" -}}
-{{- /* . is a map: {Card: VersionCard, Failing: int} */ -}}
-{{- $card := .Card -}}
-<div class="ver{{if eq (printf "%s" $card.Status) "INACTIVE"}} inactive{{end}}">
+{{- /* . is a VersionCard */ -}}
+<div class="ver{{if eq (printf "%s" .Status) "INACTIVE"}} inactive{{end}}">
   <div class="vrow">
-    {{- template "badge" $card.Version -}}
-    {{- if eq (printf "%s" $card.Status) "CURRENT"}}<span class="chip c-cur">CURRENT</span>
-    {{- else if eq (printf "%s" $card.Status) "RAMPING"}}<span class="chip c-ramp">RAMPING {{$card.TrafficPct}}%</span>
-    {{- else if eq (printf "%s" $card.Status) "DRAINING"}}<span class="chip c-drain">DRAINING</span>
+    {{- template "badge" .Version -}}
+    {{- if eq (printf "%s" .Status) "CURRENT"}}<span class="chip c-cur">CURRENT</span>
+    {{- else if eq (printf "%s" .Status) "RAMPING"}}<span class="chip c-ramp">RAMPING {{.TrafficPct}}%</span>
+    {{- else if eq (printf "%s" .Status) "DRAINING"}}<span class="chip c-drain">DRAINING</span>
     {{- else}}<span class="chip c-inact">INACTIVE</span>{{end -}}
   </div>
-  <div class="bar"><span class="{{versionClass $card.Version}}" style="--bar-w:{{barWidth $card.TrafficPct}}%"></span></div>
-  {{- if gt .Failing 0}}<div class="pin warn">⚠ {{.Failing}} failing</div>
-  {{- else}}<div class="pin">🔒 {{$card.PinnedCount}}</div>{{end -}}
+  <div class="bar"><span class="{{versionClass .Version}}" style="--bar-w:{{barWidth .TrafficPct}}%"></span></div>
+  <div class="pin">{{.PinnedCount}} in flight</div>
 </div>
 {{- end -}}
 
 {{- define "versions" -}}
-{{- $failing := failingByVersion . -}}
-{{- range .Versions -}}
-{{- template "version" (dict "Card" . "Failing" (index $failing .Version)) -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "controls" -}}
-{{- /* The ramp/promote/rollback controls now live in the static Deploy modal in
-       index.html (driven by fetch, not htmx). Only the recover action stays here;
-       its toast fragment targets #toast. */ -}}
-<button class="btn" hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover stuck orders</button>
+{{- range .Versions -}}{{template "version" .}}{{end -}}
 {{- end -}}
 
 {{- define "toast" -}}

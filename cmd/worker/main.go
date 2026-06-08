@@ -42,7 +42,7 @@ func run(logger *slog.Logger) error {
 		taskQueue       string
 		version         string
 	}{
-		temporalAddress: getenv("TEMPORAL_ADDRESS", "localhost:7233"),
+		temporalAddress: getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
 		namespace:       getenv("TEMPORAL_NAMESPACE", "default"),
 		deploymentName:  os.Getenv("TEMPORAL_DEPLOYMENT_NAME"),
 		buildID:         os.Getenv("TEMPORAL_WORKER_BUILD_ID"),

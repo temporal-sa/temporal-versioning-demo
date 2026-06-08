@@ -26,7 +26,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	addr := "0.0.0.0:" + getenv("PORT", "8080")
-	temporalAddress := getenv("TEMPORAL_ADDRESS", "localhost:7233")
+	temporalAddress := getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233")
 	namespace := getenv("TEMPORAL_NAMESPACE", "default")
 	deploymentName := getenv("PIZZA_DEPLOYMENT_NAME", "pizza")
 	taskQueue := getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue)

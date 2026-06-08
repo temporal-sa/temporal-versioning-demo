@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alexandreroman/temporal-versioning-demo/internal/pizza"
@@ -41,17 +42,8 @@ type VersionCard struct {
 	PinnedCount int           `json:"pinnedCount"`
 }
 
-// KPIs is the top strip.
-type KPIs struct {
-	InFlight       int    `json:"inFlight"`
-	CurrentVersion string `json:"currentVersion"`
-	RampingVersion string `json:"rampingVersion"`
-	RampingPct     int    `json:"rampingPct"`
-}
-
 // DashboardState is the full SSE payload.
 type DashboardState struct {
-	KPIs     KPIs          `json:"kpis"`
 	Orders   []Order       `json:"orders"`
 	Versions []VersionCard `json:"versions"`
 }
@@ -137,14 +129,27 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 		cards = append(cards, card)
 	}
 
-	kpi := KPIs{
-		InFlight:       len(orders),
-		CurrentVersion: label[routing.CurrentBuildID],
-		RampingVersion: label[routing.RampingBuildID],
-		RampingPct:     routing.RampingPct,
-	}
+	// Display cards in friendly-label order (v1, v2, v3). Compare the integer
+	// after the leading "v" so the ordering is numeric rather than fragile
+	// lexicographic; fall back to a plain string compare when either label does
+	// not parse. A stable sort keeps the CreateTime order for ties.
+	sort.SliceStable(cards, func(i, j int) bool {
+		return lessVersion(cards[i].Version, cards[j].Version)
+	})
 
-	return DashboardState{KPIs: kpi, Orders: outOrders, Versions: cards}
+	return DashboardState{Orders: outOrders, Versions: cards}
+}
+
+// lessVersion orders friendly version labels (v1 < v2 < v3) by the integer after
+// the leading "v". If either label does not parse, it falls back to a plain
+// string comparison so the order stays deterministic.
+func lessVersion(a, b string) bool {
+	na, errA := strconv.Atoi(strings.TrimPrefix(a, "v"))
+	nb, errB := strconv.Atoi(strings.TrimPrefix(b, "v"))
+	if errA != nil || errB != nil {
+		return a < b
+	}
+	return na < nb
 }
 
 func friendly(i int) string {

@@ -53,12 +53,6 @@ func TestRendererRegions(t *testing.T) {
 		region string
 		want   []string
 	}{
-		{"kpis", []string{
-			"In flight", ">2<", // in-flight count
-			`vb b-v2`,         // current version badge color
-			`vb b-v3`,         // ramping version badge color
-			`class="pct">10%`, // ramping pct
-		}},
 		{"orders", []string{
 			"#order-1", "#order-2",
 			"Pepperoni", "Diavola",
@@ -72,13 +66,10 @@ func TestRendererRegions(t *testing.T) {
 			"INACTIVE",            // v1 inactive
 			`chip c-cur">CURRENT`, // v2 current
 			"RAMPING 10%",         // v3 ramping with pct
-			"⚠ 1 failing",         // failing slice on v3
+			"1 in flight",         // v3 has one pinned (in-flight) order
 			// Traffic bar fill: color via class, width via the --bar-w custom
 			// property (the rule itself lives in index.html, not the template).
 			`<span class="b-v3" style="--bar-w:10%">`, // v3 ramping bar at 10%
-		}},
-		{"controls", []string{
-			`hx-post="/api/recover"`,
 		}},
 	}
 

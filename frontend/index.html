@@ -109,10 +109,9 @@
 
       /* ===== App shell =====
          The shell (and thus the header) is full-bleed: it spans the full
-         window width with no container. Only the KPI strip and the body are
-         wrapped in a narrower, horizontally-centered max-w-5xl column (see
-         .kpis and .dbody). No horizontal padding here: the inner sections
-         supply their own px. */
+         window width with no container. Only the body is wrapped in a narrower,
+         horizontally-centered max-w-5xl column (see .dbody). No horizontal
+         padding here: the inner sections supply their own px. */
       .app {
         @apply flex flex-col overflow-hidden;
         height: 100dvh;
@@ -142,51 +141,15 @@
         height: 32px;
       }
 
-      /* ===== KPI band =====
-         A STABLE 4-column grid that never reflows between the idle and ramping
-         states: In flight | Current | Ramping | Deploy. The Ramping cell keeps
-         its slot when empty (.kpi.empty hides only its label), so nothing
-         shifts when a rollout starts or ends. The Deploy button is pinned to
-         the right via .kpi-act. Shares the same centered max-w-5xl column as
-         .dbody, so the Deploy button aligns with the Deployment column below. */
-      .kpis {
-        @apply mx-auto w-full max-w-5xl grid shrink-0 items-center gap-[14px] px-[18px] py-[14px];
-        grid-template-columns: 0.8fr 0.9fr 1fr 1fr;
-        background: #0e0e13;
-        border-bottom: 1px solid #23232c;
-      }
-
-      .kpi {
-        @apply flex flex-col gap-[7px];
-        min-height: 48px;
-      }
-
-      .kpi.empty .l {
-        visibility: hidden;
-      }
-
-      .kpi .l {
-        @apply text-[9px] uppercase opacity-50;
-        letter-spacing: 0.5px;
-      }
-
-      .kpi .v {
-        @apply flex items-center gap-2 text-[17px] font-bold;
-      }
-
-      .kpi-act {
-        @apply justify-self-end;
-      }
-
-      /* Read-only ramp percentage shown next to the badge in the band and as the
-         live value in the Deploy modal. Uses the amber ramping accent. */
+      /* Read-only ramp percentage shown as the live value in the Deploy modal.
+         Uses the amber ramping accent. */
       .pct {
         @apply font-extrabold;
         color: var(--color-amber);
       }
 
       /* ===== Body: two flex columns =====
-         Centered in the narrower max-w-5xl column shared with the KPI strip.
+         Centered in a narrower max-w-5xl column.
          A flex row: a flexible orders column (.dleft) that takes all remaining
          width, and a fixed 360px deployment column (.dright). The vertical
          divider is a 1px border-left on .dright (each column paints its own
@@ -559,14 +522,13 @@
         @apply mt-2 text-[10.5px] opacity-60;
       }
 
-      .pin.warn {
-        color: #fca5a5;
-        opacity: 1;
-      }
-
       /* ===== Buttons ===== */
       .controls {
-        @apply mt-4;
+        @apply mt-4 flex gap-2;
+      }
+
+      .controls .btn {
+        @apply mt-0 flex-1;
       }
 
       .ramp-row {
@@ -738,24 +700,6 @@
         </div>
       </header>
 
-      <div class="kpis" id="kpis" sse-swap="kpis">
-        <div class="kpi">
-          <div class="l">In flight</div>
-          <div class="v">—</div>
-        </div>
-        <div class="kpi">
-          <div class="l">Current</div>
-          <div class="v">—</div>
-        </div>
-        <div class="kpi empty">
-          <div class="l">Ramping</div>
-          <div class="v">&nbsp;</div>
-        </div>
-        <div class="kpi-act">
-          <button class="btn primary" type="button" onclick="openDeploy()">Deploy</button>
-        </div>
-      </div>
-
       <div class="dbody">
         <section class="dleft">
           <div class="sect">Live orders</div>
@@ -766,8 +710,11 @@
           <div class="sect">Deployment</div>
           <div id="versions" sse-swap="versions"></div>
 
-          <div class="controls" id="controls" sse-swap="controls">
-            <button class="btn">Recover stuck orders</button>
+          <div class="controls">
+            <button class="btn primary" type="button" onclick="openDeploy()">Deploy</button>
+            <button class="btn danger" type="button" onclick="rollbackDeploy()">Rollback</button>
+            <button class="btn" type="button"
+                    hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover</button>
           </div>
         </aside>
       </div>
@@ -802,7 +749,6 @@
         <div class="scale"><b>10</b><b>25</b><b>50</b><b>100</b></div>
         <p class="modal-note">At 100% this promotes the version to Current.</p>
         <div class="modal-acts">
-          <button class="btn danger" type="button" onclick="rollbackDeploy()">⟲ Rollback</button>
           <button class="btn" type="button" onclick="closeDeploy()">Cancel</button>
           <button class="btn primary" type="button" onclick="applyDeploy()">Apply</button>
         </div>
@@ -810,8 +756,9 @@
     </div>
 
     <!-- Action results and errors are swapped here as toast fragments. The
-         Recover button lives in #controls; the Deploy modal posts via fetch.
-         Both surface error responses here via #toast. -->
+         Deploy/Rollback/Recover buttons live in the Deployment column controls
+         row; Deploy/Rollback post via fetch and Recover posts via htmx. All
+         surface error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
 
     <!-- Client-side masonry layout for the live order cards.
@@ -1001,9 +948,12 @@
     <!-- Deploy modal behavior.
 
          The modal is static markup (outside every sse-swap region), so SSE
-         frames never touch it. Its actions POST via fetch rather than htmx:
+         frames never touch it. Deploy/Rollback/Recover now live in the
+         Deployment column controls row; Deploy opens this modal, Rollback calls
+         window.rollbackDeploy directly, and Recover posts via htmx. The modal's
+         own actions POST via fetch rather than htmx:
            - Apply at 100% -> /api/promote (version), otherwise -> /api/ramp.
-           - Rollback     -> /api/rollback.
+           - Rollback (from the controls row) -> /api/rollback.
          On success the modal closes; on error the response body (a toast HTML
          fragment) is shown in #toast. The slider snaps to 4 reachable stops. -->
     <script>

@@ -33,11 +33,12 @@ func TestBuildStateLabelsByCreateTimeAndCountsPinned(t *testing.T) {
 
 	st := dashboard.BuildState(routing, summaries, orders)
 
-	if st.KPIs.InFlight != 3 {
-		t.Errorf("inFlight = %d, want 3", st.KPIs.InFlight)
-	}
-	if st.KPIs.CurrentVersion != "v2" || st.KPIs.RampingVersion != "v3" || st.KPIs.RampingPct != 10 {
-		t.Errorf("KPIs = %+v", st.KPIs)
+	wantOrder := []string{"v1", "v2", "v3"}
+	for i, want := range wantOrder {
+		if st.Versions[i].Version != want {
+			t.Errorf("Versions[%d] = %q, want %q (cards must be ordered v1, v2, v3)",
+				i, st.Versions[i].Version, want)
+		}
 	}
 	byVer := map[string]dashboard.VersionCard{}
 	for _, c := range st.Versions {
@@ -64,12 +65,13 @@ func TestBuildStateLabelsByMetadataWhenPresent(t *testing.T) {
 	routing := dashboard.Routing{CurrentBuildID: "b_old"}
 	st := dashboard.BuildState(routing, summaries, nil)
 
-	if st.KPIs.CurrentVersion != "v1" {
-		t.Errorf("current label = %q, want v1 (from metadata)", st.KPIs.CurrentVersion)
-	}
 	byVer := map[string]dashboard.VersionCard{}
 	for _, c := range st.Versions {
 		byVer[c.Version] = c
+	}
+	// b_old is the CurrentBuildID and is labelled v1 via metadata.
+	if byVer["v1"].BuildID != "b_old" || byVer["v1"].Status != dashboard.StatusCurrent {
+		t.Errorf("v1 card = %+v, want build b_old with status CURRENT", byVer["v1"])
 	}
 	if _, ok := byVer["v3"]; !ok {
 		t.Errorf("expected a v3 card from metadata, got %+v", st.Versions)

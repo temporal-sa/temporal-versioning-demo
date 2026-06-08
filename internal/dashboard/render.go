@@ -39,8 +39,8 @@ func NewRenderer() (*Renderer, error) {
 	return &Renderer{tmpl: tmpl}, nil
 }
 
-// Region renders a single named region (kpis, orders, versions, controls)
-// to w using the given state.
+// Region renders a single named region (orders, versions) to w using the given
+// state.
 func (r *Renderer) Region(w io.Writer, name string, state DashboardState) error {
 	if err := r.tmpl.ExecuteTemplate(w, name, state); err != nil {
 		return fmt.Errorf("render region %q: %w", name, err)
@@ -59,31 +59,12 @@ func (r *Renderer) Toast(w io.Writer, message string) error {
 // funcMap ports the app.js rendering helpers into template functions.
 func funcMap() template.FuncMap {
 	return template.FuncMap{
-		"versionClass":     versionClass,
-		"elapsed":          formatElapsed,
-		"stepNodes":        stepNodes,
-		"stepperStyle":     stepperStyle,
-		"barWidth":         barWidth,
-		"failingByVersion": failingByVersion,
-		"dict":             dict,
+		"versionClass": versionClass,
+		"elapsed":      formatElapsed,
+		"stepNodes":    stepNodes,
+		"stepperStyle": stepperStyle,
+		"barWidth":     barWidth,
 	}
-}
-
-// dict builds a map from alternating key/value args, letting a template pass
-// multiple values to a sub-template (here: a version card and its failing count).
-func dict(pairs ...any) (map[string]any, error) {
-	if len(pairs)%2 != 0 {
-		return nil, fmt.Errorf("dict: odd number of arguments (%d)", len(pairs))
-	}
-	m := make(map[string]any, len(pairs)/2)
-	for i := 0; i < len(pairs); i += 2 {
-		key, ok := pairs[i].(string)
-		if !ok {
-			return nil, fmt.Errorf("dict: key %d is not a string", i)
-		}
-		m[key] = pairs[i+1]
-	}
-	return m, nil
 }
 
 // versionClass maps a friendly version to its badge color class (b-v1/b-v2/b-v3),
@@ -165,16 +146,4 @@ func barWidth(pct int) int {
 		return 100
 	}
 	return pct
-}
-
-// failingByVersion counts failing orders per friendly version, so a version
-// card can flag its own slice (mirrors app.js renderVersions).
-func failingByVersion(state DashboardState) map[string]int {
-	counts := make(map[string]int)
-	for _, o := range state.Orders {
-		if o.Failing {
-			counts[o.Version]++
-		}
-	}
-	return counts
 }
