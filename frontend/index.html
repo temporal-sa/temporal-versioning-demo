@@ -88,6 +88,21 @@
             transform: translateY(0);
           }
         }
+
+        /* Done card collapse: after a visible delay the card shrinks its
+           height and bottom margin to nothing so the cards below it glide up to
+           reuse the freed space. Driven purely by CSS (see .order.done). */
+        @keyframes card-collapse {
+          to {
+            max-height: 0;
+            margin-bottom: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-width: 0;
+            opacity: 0;
+            filter: grayscale(1);
+          }
+        }
       }
 
       * {
@@ -149,12 +164,11 @@
       }
 
       /* ===== Body: two flex columns =====
-         Centered in a narrower max-w-5xl column.
-         A flex row: a flexible orders column (.dleft) that takes all remaining
-         width, and a fixed 360px deployment column (.dright). The vertical
-         divider is a 1px border-left on .dright (each column paints its own
-         #0e0e13 background). At this container width the orders masonry settles
-         to a single column. Stacks vertically on mobile. */
+         Centered in a narrower max-w-5xl column. A flex row: a flexible orders
+         column (.dleft) that takes the remaining width, and a fixed 360px
+         deployment column (.dright). The vertical divider is a 1px border-left
+         on .dright (each column paints its own #0e0e13 background). Stacks
+         vertically on mobile. */
       .dbody {
         @apply mx-auto w-full max-w-5xl flex min-h-0 flex-1 max-[760px]:flex-col;
       }
@@ -163,19 +177,19 @@
         /* Flexible column: takes all remaining horizontal space (~2/3). */
         @apply flex-1 flex min-w-0 min-h-0 flex-col overflow-y-auto px-[18px] py-4 max-[760px]:overflow-visible;
         background: #0e0e13;
-        /* Always reserve the scrollbar gutter so the masonry columns don't shift
-           left when the scrollbar toggles as orders are added/removed. Inert on
-           mobile, where .dleft is overflow-visible (no internal scroll region). */
+        /* Reserve the scrollbar gutter so the centered orders don't shift
+           sideways when the scrollbar appears/disappears as the list grows.
+           Inert on mobile (overflow-visible, no internal scroll region). */
         scrollbar-gutter: stable;
       }
 
       .dright {
         /* Fixed-width column: 360px, never grows or shrinks (matches the Deploy
-           modal width and the masonry MIN_COL). The border-left draws the
-           continuous vertical divider between orders and deployment; dropped on
-           mobile, where the column is full-width and stacks below the orders. */
+           modal width). The border-left draws the continuous vertical divider
+           between orders and deployment; dropped on mobile, where the column is
+           full-width and stacks above the orders. */
         @apply w-[360px] shrink-0 min-w-0 min-h-0 overflow-y-auto border-l border-[#23232c] px-[18px]
-          py-4 max-[760px]:w-auto max-[760px]:border-l-0 max-[760px]:overflow-visible;
+          py-4 max-[760px]:w-auto max-[760px]:border-l-0 max-[760px]:overflow-visible max-[760px]:order-first;
         background: #0e0e13;
         /* Always reserve the scrollbar gutter so the column doesn't shift when
            the scrollbar toggles. */
@@ -194,14 +208,11 @@
 
       /* ===== Live orders list ===== */
       .olist {
-        /* Positioning context for the absolutely-placed cards laid out by the
-           masonry script. Height is set inline by that script; scrolling is
-           delegated to the .dleft column (already overflow-y-auto).
-           shrink-0 is essential: .olist is a flex item of the flex-col .dleft,
-           and its children are absolutely positioned, so its min-height resolves
-           to 0 — without shrink-0 the flex algorithm collapses it below the
-           script-set height, clipping the bottom (and any bottom padding). */
-        @apply relative shrink-0;
+        /* A single column of cards in normal document flow; inter-card spacing
+           comes from each .order's bottom margin. shrink-0 keeps this flex item
+           of the flex-col .dleft at its content height, so .dleft scrolls
+           instead of compressing the list. */
+        @apply shrink-0;
       }
 
       @media (max-width: 760px) {
@@ -269,36 +280,22 @@
 
       /* ===== Order card + stepper ===== */
       .order {
-        @apply rounded-xl p-[13px_14px];
+        @apply mb-3 rounded-xl p-[13px_14px];
         background: #15151d;
         border: 1px solid #20202a;
         /* Transparent ring so the hover outline can ease in/out; outline-offset
            sits it just OUTSIDE the border. Outline (not box-shadow) keeps it
-           layout-free, so the masonry script's offsetHeight reads stay correct. */
+           layout-free. */
         outline: 1.5px solid transparent;
         outline-offset: 2px;
-        /* The masonry script places cards absolutely within the relative #orders;
-           left/top/width are set inline per layout pass. */
-        position: absolute;
-        left: 0;
-        top: 0;
-        box-sizing: border-box;
-        /* Generous cap so .order.done can transition max-height to 0 (real cards
-           are far shorter, so this never clips a live card). */
+        /* Finite cap so .order.done can animate max-height to 0 on collapse
+           (real cards are far shorter, so this never clips a live card). */
         max-height: 600px;
-        /* card-in animates transform (translateY), which the script never sets —
-           the script positions via left/top — so the two never conflict. */
+        /* New cards run the entry animation once; morphed (persisted) nodes keep
+           their DOM node and do not replay it. */
         animation: card-in 0.35s ease backwards;
-        /* Glide to new positions (left/top/width) and the Done collapse
-           (max-height/opacity/filter). The last four entries ease the hover
-           lift below; they do not affect the masonry-driven left/top/width. */
+        /* Ease the hover lift and the colour/state changes. */
         transition:
-          left 0.45s ease,
-          top 0.45s ease,
-          width 0.45s ease,
-          max-height 0.5s ease,
-          opacity 0.5s ease,
-          filter 0.4s ease,
           background-color 0.18s ease,
           border-color 0.18s ease,
           transform 0.18s ease,
@@ -311,15 +308,11 @@
         background: #1a1416;
       }
 
-      /* Hover lift, scoped out of the collapsing state so it never fights the
-         Done collapse. The lift uses transform (NOT top/margin) on purpose: the
-         masonry script owns inline left/top and reads offsetHeight, and a
-         transform changes neither — so the layout stays untouched. Switching
-         this to top/margin would desync the masonry. The neutral-grey outline
-         ring is an OUTLINE (not box-shadow) on purpose: it has no layout impact
-         and follows the border-radius, so it stays masonry-safe. Do not refactor
-         it into anything that affects box size. */
-      .order:hover:not([data-collapsing]) {
+      /* Hover lift, scoped out of the Done state so it never fights the collapse.
+         The lift uses transform (not top/margin) so it has no layout impact; the
+         neutral-grey ring is an outline (not box-shadow) so it adds no box and
+         follows the border-radius. */
+      .order:hover:not(.done) {
         background-color: #1a1a24;
         border-color: #2f2f3c;
         /* Light, crisp grey clearly lighter than the hover border (#2f2f3c) so the
@@ -330,26 +323,22 @@
       }
 
       /* Keep the red identity on hover so a failed card lifts without turning grey. */
-      .order.fail:hover:not([data-collapsing]) {
+      .order.fail:hover:not(.done) {
         background-color: #241a1c;
         border-color: #7a2a2a;
         transform: translateY(-2px);
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
       }
 
-      /* Collapse: pure vertical collapse (grey + dim + height → 0). A Done card
-         keeps its normal full appearance (the all-green stepper is the cue)
-         until the masonry script flags it data-collapsing, COLLAPSE_DELAY after
-         it became Done. The script then treats its height as 0, so cards below
-         it in the same column glide up to reuse the freed space. */
-      .order[data-collapsing] {
-        overflow: hidden; /* clip own content while the height collapses */
-        max-height: 0;
-        opacity: 0;
-        filter: grayscale(1);
-        padding-top: 0;
-        padding-bottom: 0;
-        border-width: 0;
+      /* Done → visible-then-collapse, with no JavaScript: the server adds the
+         `done` class (the all-green stepper is the cue); the card stays full for
+         4s, then card-collapse shrinks its height and bottom margin to 0 over
+         0.5s so the cards below glide up. overflow:hidden clips the content
+         during the shrink. DeliveredDwell keeps the workflow Running long enough
+         for this to finish. */
+      .order.done {
+        overflow: hidden;
+        animation: card-collapse 0.5s ease 4s forwards;
       }
 
       .oh {
@@ -474,12 +463,17 @@
         font-weight: 700;
       }
 
-      /* Disable the smoothing/entry motion added above for reduced-motion users. */
+      /* Disable the smoothing/entry motion for reduced-motion users. The Done
+         collapse keeps its 4s delay but snaps shut instead of gliding, so done
+         cards still clear the board. */
       @media (prefers-reduced-motion: reduce) {
-        /* Instant positioning and instant collapse: no glide, no animated height. */
         .order {
           animation: none;
           transition: none;
+        }
+
+        .order.done {
+          animation: card-collapse 0.01s linear 4s forwards;
         }
 
         .stepper::after,
@@ -760,190 +754,6 @@
          row; Deploy/Rollback post via fetch and Recover posts via htmx. All
          surface error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
-
-    <!-- Client-side masonry layout for the live order cards.
-
-         The server keeps morphing a flat, oldest-first list of .order cards into
-         #orders (SSE + idiomorph) untouched. This script does NOT move nodes or
-         touch the data pipeline — it only positions the existing cards into
-         independent columns:
-
-           - Each card is pinned to a column (dataset.col) for its lifetime, so it
-             never jumps columns when others arrive or leave.
-           - A new card fills the bottom of the shortest column.
-           - A done card is treated as zero-height, so cards below it in the same
-             column glide up (CSS transitions on left/top/width handle the glide).
-           - The column count adapts to width; a width change forces a re-pack. -->
-    <script>
-      (function () {
-        "use strict";
-
-        var MIN_COL = 360; // minimum usable column width in px
-        var MAX_COLS = 2; // cap matches the dashboard's 2-column intent
-        var GAP = 12; // px gutter between columns/cards (matches gap-3)
-        var COLLAPSE_DELAY = 4000; // ms a Done card stays visible before it collapses
-
-        var orders = document.getElementById("orders");
-        if (!orders) {
-          return; // defensive no-op if the target is absent
-        }
-
-        // idiomorph syncs attributes on each morph and would strip the inline style
-        // (top/left/width) the masonry layout sets — the server-rendered cards have no
-        // style attribute — causing the cards to flash back to 0,0 every SSE tick.
-        // Tell idiomorph to leave .order's style and data-* attributes alone; the
-        // script owns them.
-        if (typeof Idiomorph !== "undefined") {
-          Idiomorph.defaults.callbacks = Idiomorph.defaults.callbacks || {};
-          var prevBeforeAttr = Idiomorph.defaults.callbacks.beforeAttributeUpdated;
-          Idiomorph.defaults.callbacks.beforeAttributeUpdated = function (attr, node, mutationType) {
-            if (
-              (attr === "style" || attr.indexOf("data-") === 0) &&
-              node.nodeType === 1 &&
-              node.classList &&
-              node.classList.contains("order")
-            ) {
-              return false; // skip — the script owns the card's style and data-* attributes (inline position, column pin, collapse state)
-            }
-            if (typeof prevBeforeAttr === "function") {
-              return prevBeforeAttr(attr, node, mutationType);
-            }
-          };
-        }
-
-        var lastColumnCount = 0;
-        var frame = 0;
-
-        function layout() {
-          var width = orders.clientWidth;
-          if (width <= 0) {
-            return; // not laid out / hidden yet
-          }
-
-          var count = Math.max(
-            1,
-            Math.min(MAX_COLS, Math.floor((width + GAP) / (MIN_COL + GAP)))
-          );
-          var colWidth = (width - (count - 1) * GAP) / count;
-
-          // A change in column count invalidates every pin: re-pack from scratch.
-          if (count !== lastColumnCount) {
-            var i;
-            var all = orders.children;
-            for (i = 0; i < all.length; i++) {
-              delete all[i].dataset.col;
-            }
-            lastColumnCount = count;
-          }
-
-          // Running pixel height of each column, used both to place cards and to
-          // pick the shortest column for newcomers.
-          var colHeights = new Array(count).fill(0);
-
-          var cards = orders.children;
-          for (var c = 0; c < cards.length; c++) {
-            var card = cards[c];
-
-            // Pin to a column: keep a valid existing assignment, otherwise drop
-            // the new card into the currently shortest column.
-            var col = parseInt(card.dataset.col, 10);
-            if (isNaN(col) || col >= count) {
-              col = shortestColumn(colHeights);
-              card.dataset.col = String(col);
-            }
-
-            // A freshly morphed-in card has no inline top yet (CSS defaults to
-            // top:0; left:0), so its first placement would otherwise glide in
-            // from the corner via the .order left/top transition. Suppress the
-            // transition for this first placement only; later moves still
-            // animate, and the card-in entry animation (transform) is untouched.
-            var isFirstPlacement = !card.style.top;
-            if (isFirstPlacement) {
-              card.style.transition = "none";
-            }
-            card.style.width = colWidth + "px";
-            card.style.left = col * (colWidth + GAP) + "px";
-            card.style.top = colHeights[col] + "px";
-            if (isFirstPlacement) {
-              // Force a reflow so the no-transition placement is committed, then
-              // restore the stylesheet transition so future moves animate.
-              void card.offsetWidth;
-              card.style.transition = "";
-            }
-
-            // A Done card stays full-height (all-green stepper) for COLLAPSE_DELAY,
-            // then a one-shot timer flags it data-collapsing — only then does it
-            // collapse to zero and let the cards below it glide up to reuse the space.
-            if (card.classList.contains("done") && !card.dataset.doneSeen) {
-              card.dataset.doneSeen = "1";
-              var leaving = card;
-              setTimeout(function () {
-                leaving.dataset.collapsing = "1";
-                scheduleLayout();
-              }, COLLAPSE_DELAY);
-            }
-
-            var height = card.dataset.collapsing ? 0 : card.offsetHeight;
-            if (height > 0) {
-              colHeights[col] += height + GAP;
-            }
-          }
-
-          // Size the positioning context to the tallest column so .dleft scrolls.
-          orders.style.height = Math.max(0, Math.max.apply(null, colHeights)) + "px";
-        }
-
-        function shortestColumn(colHeights) {
-          var best = 0;
-          for (var i = 1; i < colHeights.length; i++) {
-            if (colHeights[i] < colHeights[best]) {
-              best = i;
-            }
-          }
-          return best;
-        }
-
-        // rAF-debounced wrapper: coalesce bursts and guard against re-entrancy.
-        function scheduleLayout() {
-          if (frame) {
-            return;
-          }
-          frame = requestAnimationFrame(function () {
-            frame = 0;
-            layout();
-          });
-        }
-
-        // Relayout after each SSE morph into #orders.
-        document.body.addEventListener("htmx:afterSettle", function (e) {
-          if (
-            e.target.id === "orders" ||
-            (e.target.closest && e.target.closest("#orders"))
-          ) {
-            scheduleLayout();
-          }
-        });
-
-        // Responsive: window resize and panel reflow.
-        // Observe .dleft (the column whose width tracks the viewport), NOT #orders:
-        // the script sets #orders' height every layout, which would otherwise re-fire
-        // the observer on its own writes.
-        var resizeTarget = orders.closest(".dleft") || orders;
-        new ResizeObserver(scheduleLayout).observe(resizeTarget);
-
-        // rAF is paused in background tabs, so cards that morph in while
-        // backgrounded never get positioned. Relayout when the tab is shown.
-        document.addEventListener("visibilitychange", function () {
-          if (!document.hidden) {
-            scheduleLayout();
-          }
-        });
-
-        // Initial layout, and once more after htmx settles the shell.
-        document.addEventListener("DOMContentLoaded", layout);
-        document.body.addEventListener("htmx:afterSettle", scheduleLayout, { once: true });
-      })();
-    </script>
 
     <!-- Deploy modal behavior.
 

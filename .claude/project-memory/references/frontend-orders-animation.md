@@ -1,66 +1,64 @@
 ---
-name: "Live orders: idiomorph + masonry gotchas"
-description: "The #orders region morphs (not replaces) and uses a client-side pinned-column masonry; key gotchas that cause flicker/reshuffle if broken"
+name: "Live orders: morph + CSS-only collapse (single column)"
+description: "The #orders region morphs (not replaces) and lays cards out as a single normal-flow column; Done collapse and the layout are pure CSS — no masonry/positioning script"
 type: feedback
 ---
 
-# Live orders: idiomorph + masonry gotchas
+# Live orders: morph + CSS-only collapse (single column)
 
-The live `#orders` region is animated; these non-obvious gotchas are easy to
-reintroduce:
+The live `#orders` region is animated; these non-obvious points are easy to get
+wrong. **History:** there used to be a client-side multi-column *masonry* script
+(absolute-positioned cards, column pinning, a `data-collapsing` JS timer, and an
+idiomorph `beforeAttributeUpdated` guard). It was **removed** once the layout
+settled to a single column — cards are now plain normal-flow blocks and every
+animation is CSS. Do not reintroduce the masonry.
 
 - **`#orders` morphs, it does not replace.** It uses idiomorph
   (`hx-swap="morph:innerHTML"`); each card has a stable `id="order-{ID}"` so
-  existing cards persist as DOM nodes. That persistence is what lets CSS
-  transitions and the once-only entry animation work. A plain `innerHTML` swap
-  recreates nodes every tick and kills the animations (the other sse-swap
-  targets — kpis/versions/controls — do use plain `innerHTML`).
-- **CRITICAL idiomorph gotcha:** idiomorph removes any attribute the server
-  didn't render. The masonry script owns the inline `style` and all `data-*` on
-  `.order`, but the server renders them empty — so each morph stripped them,
-  causing flicker (cards flash to 0,0) and column reshuffle (lost `data-col`).
-  Fix: a global `Idiomorph.defaults.callbacks.beforeAttributeUpdated` that
-  returns `false` for `style` and `data-*` on `.order`. Do not let idiomorph
-  touch them.
-- **Client-side masonry of pinned columns** (vanilla script in `index.html`, not
-  CSS grid — grid can't do per-column collapse). Each order pins to a column for
-  its lifetime and never reshuffles; a new card goes to the shortest column; a
-  full re-pack happens only when the column count changes on resize. Capped at
-  **2 columns** (`MAX_COLS`). `.dleft` is the scroll container with
-  `scrollbar-gutter: stable` — without it, a classic scrollbar appearing as the
-  list grows shrinks the width and the columns drift.
-- **`.olist` (`#orders`) MUST be `shrink-0`.** It is a flex item of the
-  `flex-col` `.dleft`, and its children are all absolutely positioned, so its
-  `min-height` resolves to 0. The masonry script sets an inline `height` on it,
-  but that is only the flex-basis — without `shrink-0` the flex algorithm
-  collapses `#orders` far below the set height (measured 438px vs 1131px set).
-  Cards still show (they overflow and `.dleft` scrolls them), so the bug is
-  invisible until you need the element's own box: any **bottom padding gets
-  swallowed** and the last card sits flush against the window bottom. Fix is
-  `shrink-0` on `.olist`; then ordinary `padding-bottom` on `.dleft` (`py-4`,
-  the page-standard 16px) spaces the last card correctly. Do NOT fake the gap
-  by padding the
-  script-set `#orders` height — that was a wrong workaround for this real bug.
-- **Body layout is a shared `grid grid-cols-3` (KPI strip + `.dbody`)** so the
-  2/3 column boundary is pixel-identical. `.dbody` needs an explicit
-  `grid-rows-1` (`minmax(0,1fr)`) row track — a grid with no row track gets an
-  `auto` row that grows to content, leaving `.dleft` unbounded so its
-  `overflow-y-auto` never engages and the scrollbar disappears. Reset with
-  `grid-rows-none` on mobile.
-- **Done → visible-then-collapse:** the server adds class `done`; the card stays
-  full-height/all-green for `COLLAPSE_DELAY` (4 s), then a one-shot timer sets
-  `data-collapsing`, which drives both the CSS collapse and the masonry's
-  zero-height treatment so neighbours glide up. `DeliveredDwell` keeps the
-  workflow Running long enough for this to finish — see [[demo-timing]].
-- **Layout intents to preserve:** the right Deployment column is pinned to
-  exactly one third (`basis-1/3 grow-0 shrink-0`) to align with the 3rd KPI
-  cell; the per-order stepper spans the full card width as one progress track
-  whose fill is driven server-side by `--fill`.
+  existing cards persist as DOM nodes. That persistence is what lets the
+  once-only entry animation (`card-in`) play only for genuinely new nodes and
+  lets the stepper fill (`--fill`, server-rendered on `.stepper`) glide via its
+  CSS `width` transition. A plain `innerHTML` swap would recreate nodes every
+  tick and kill both (the other sse-swap targets — `versions` — do use plain
+  `innerHTML`). idiomorph now syncs **all** attributes normally (no guard): the
+  cards carry no client-owned `style`/`data-*`, and we *want* idiomorph to
+  update the `done`/`fail` classes and the stepper `--fill`.
+- **Single column, normal document flow.** Cards (`.order`) are ordinary blocks
+  stacked in `.olist` (just `shrink-0`); inter-card spacing is each card's
+  `mb-3` (12px). `.olist` is `shrink-0` so this flex item of the `flex-col`
+  `.dleft` keeps its content height and `.dleft` (the `overflow-y-auto` scroll
+  container) scrolls instead of compressing the list. `.dleft` keeps
+  `scrollbar-gutter: stable` so the centered column does not shift sideways when
+  the scrollbar toggles.
+- **Done → visible-then-collapse, no JavaScript.** The server adds class `done`
+  (the all-green stepper is the cue); the card stays full for ~4s, then the
+  `card-collapse` keyframe (`animation: card-collapse 0.5s ease 4s forwards` on
+  `.order.done`) shrinks `max-height`/`margin-bottom`/padding/border to 0 and
+  fades+greys it, with `overflow: hidden` clipping the content during the
+  shrink. Because cards are in normal flow, the cards below simply reflow up as
+  the height collapses — no per-card position transition needed.
+  `max-height: 600px` on `.order` is the finite start value the collapse
+  animates from (real cards are far shorter, so it never clips a live card).
+  `DeliveredDwell` keeps the workflow Running long enough for this to finish —
+  see [[demo-timing]]. Under `prefers-reduced-motion` the collapse keeps its 4s
+  delay but snaps shut (`0.01s`) so done cards still clear the board.
+- **Hover lift is masonry-free but still layout-safe.** `.order:hover:not(.done)`
+  lifts via `transform: translateY(-2px)` and adds a neutral-grey `outline` ring
+  (not box-shadow) — both have zero layout impact. Scoped `:not(.done)` so the
+  lift never fights the collapse. `.order.fail` keeps its red identity on hover.
+- **Body layout:** `.dbody` is a centered `max-w-5xl` flex row — a flexible
+  orders column (`.dleft`, `flex-1`) and a fixed 360px deployment column
+  (`.dright`, `shrink-0`); the divider is a 1px `border-left` on `.dright`. On
+  mobile (`max-[760px]`) it switches to `flex-col` and **Deployment stacks above
+  Orders** via `max-[760px]:order-first` on `.dright` (desktop keeps the natural
+  DOM order: orders left, deployment right). The per-order stepper spans the
+  full card width as one progress track whose green fill is driven by `--fill`.
 
-**Why:** These animations depend on DOM-node persistence and on the script
-solely owning layout attributes; the failure modes (flicker, reshuffle, drift)
-are subtle and were each hit during development.
+**Why:** The animations depend on idiomorph DOM-node persistence; the rest is
+deliberately plain CSS so there is no positioning script to keep in sync (the
+old masonry's flicker/reshuffle/drift bugs are gone with it).
 
-**How to apply:** Keep morphing + stable ids for `#orders`; never let idiomorph
-write `style`/`data-*` on `.order`; keep the stable scrollbar gutter. General
-frontend rules are in [[frontend-rules]].
+**How to apply:** Keep morphing + stable ids for `#orders`; keep cards in normal
+flow with `mb-3` spacing; do the Done collapse and any responsive ordering in
+CSS, not JS. General frontend rules are in [[frontend-rules]]; the Deployment
+panel is covered in [[deployment-panel-ui]].
