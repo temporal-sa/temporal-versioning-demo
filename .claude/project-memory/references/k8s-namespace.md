@@ -26,3 +26,12 @@ namespace so it lives in exactly one place.
   - `backend.yaml` env `TEMPORAL_NAMESPACE: default`
   - `httproute.yaml` `parentRefs[].namespace: traefik` (the gateway)
 - `kubectl` commands inspecting the demo need `-n pizza-tracker`.
+- The Worker Controller names the Temporal Worker Deployment
+  `<k8s-namespace>/<WorkerDeployment-name>` (it injects
+  `TEMPORAL_DEPLOYMENT_NAME=pizza-tracker/pizza` into the worker).
+  So the backend's `PIZZA_DEPLOYMENT_NAME` MUST carry the namespace
+  prefix or it logs "no Worker Deployment found". Don't hardcode it:
+  `backend.yaml` derives `POD_NAMESPACE` via the Downward API
+  (`fieldRef metadata.namespace`) and sets
+  `PIZZA_DEPLOYMENT_NAME: $(POD_NAMESPACE)/pizza` (K8s expands
+  `$(VAR)` from an env defined earlier in the list).

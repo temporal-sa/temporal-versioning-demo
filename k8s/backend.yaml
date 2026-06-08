@@ -18,6 +18,10 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        # Distroless nonroot UID/GID; required so the kubelet can verify
+        # non-root (the image's `nonroot` user is non-numeric).
+        runAsUser: 65532
+        runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -32,8 +36,17 @@ spec:
               value: temporal-frontend.temporal.svc.cluster.local:7233
             - name: TEMPORAL_NAMESPACE
               value: default
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: PIZZA_DEPLOYMENT_NAME
-              value: pizza
+              # The Worker Controller names the deployment <namespace>/<name>.
+              # Compose it from the pod's own namespace (Downward API) so no
+              # namespace is hardcoded; only the WorkerDeployment name (pizza)
+              # is fixed. Kubernetes expands $(POD_NAMESPACE) because it is
+              # defined earlier in this list.
+              value: $(POD_NAMESPACE)/pizza
           readinessProbe:
             httpGet:
               path: /healthz
