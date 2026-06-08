@@ -601,7 +601,7 @@
 
           <div class="controls">
             <button class="btn primary" type="button" onclick="openDeploy()">Deploy</button>
-            <button class="btn danger" type="button" onclick="rollbackDeploy()">Rollback</button>
+            <button class="btn danger" type="button" onclick="openRollback()">Rollback</button>
             <button class="btn" type="button"
                     hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover</button>
           </div>
@@ -648,6 +648,19 @@
       </div>
     </div>
 
+    <!-- Rollback confirm modal: rollback is destructive, so it asks first.
+         Reuses the modal classes; Confirm posts /api/rollback via fetch. -->
+    <div id="rollback-modal" class="modal-scrim" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Confirm rollback">
+        <h3>Roll back?</h3>
+        <p class="modal-note">This reverts traffic to the previously Current version.</p>
+        <div class="modal-acts">
+          <button class="btn" type="button" onclick="closeRollback()">Cancel</button>
+          <button class="btn danger" type="button" onclick="confirmRollback()">Roll back</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Action results and errors are swapped here as toast fragments. The
          Deploy/Rollback/Recover buttons live in the Deployment column controls
          row; Deploy/Rollback post via fetch and Recover posts via htmx. All
@@ -658,8 +671,8 @@
 
          The modal is static markup (outside every sse-swap region), so SSE
          frames never touch it. Deploy/Rollback/Recover now live in the
-         Deployment column controls row; Deploy opens this modal, Rollback calls
-         window.rollbackDeploy directly, and Recover posts via htmx. The modal's
+         Deployment column controls row; Deploy opens the deploy modal, Rollback
+         opens a confirm modal (confirmRollback posts /api/rollback), Recover via htmx. The modal's
          own actions POST via fetch rather than htmx:
            - Apply at 100% -> /api/promote (version), otherwise -> /api/ramp.
            - Rollback (from the controls row) -> /api/rollback.
@@ -696,14 +709,14 @@
           if (t) t.innerHTML = html;
         }
 
-        function post(url, body) {
+        function post(url, body, onOk) {
           return fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: body,
           }).then(function (r) {
             if (!r.ok) return r.text().then(showToast);
-            window.closeDeploy();
+            if (onOk) onOk();
           });
         }
 
@@ -713,20 +726,35 @@
           if (!v || !s) return;
           var pct = STOPS[parseInt(s.value, 10)] || 10;
           if (pct === 100) {
-            post("/api/promote", "version=" + encodeURIComponent(v.value));
+            post("/api/promote", "version=" + encodeURIComponent(v.value), window.closeDeploy);
           } else {
-            post("/api/ramp", "version=" + encodeURIComponent(v.value) + "&percentage=" + pct);
+            post("/api/ramp", "version=" + encodeURIComponent(v.value) + "&percentage=" + pct, window.closeDeploy);
           }
         };
 
-        window.rollbackDeploy = function () {
-          post("/api/rollback", "");
+        window.openRollback = function () {
+          var m = document.getElementById("rollback-modal");
+          if (m) m.hidden = false;
+        };
+
+        window.closeRollback = function () {
+          var m = document.getElementById("rollback-modal");
+          if (m) m.hidden = true;
+        };
+
+        window.confirmRollback = function () {
+          post("/api/rollback", "", window.closeRollback);
         };
 
         document.addEventListener("keydown", function (e) {
           if (e.key !== "Escape") return;
-          var m = modal();
-          if (m && !m.hidden) window.closeDeploy();
+          var d = modal();
+          if (d && !d.hidden) {
+            window.closeDeploy();
+            return;
+          }
+          var rb = document.getElementById("rollback-modal");
+          if (rb && !rb.hidden) window.closeRollback();
         });
       })();
     </script>
