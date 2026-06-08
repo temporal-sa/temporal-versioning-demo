@@ -228,6 +228,12 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRecover(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), recoverTimeout)
 	defer cancel()
+
+	// Flip the controls into their busy state for the action's full duration; the
+	// flag streams to the browser over SSE (see Hub.SetRecovering).
+	s.hub.SetRecovering(true)
+	defer s.hub.SetRecovering(false)
+
 	recovered, err := s.actions.Recover(ctx)
 	if err != nil {
 		s.logger.Warn("recover failed", "err", err)

@@ -181,6 +181,35 @@ func TestRendererControls(t *testing.T) {
 	}
 }
 
+func TestRendererControlsRecovering(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	// Ramping + a failing order, then mark a recover in progress.
+	st := rampingState("v3", 25, "v2", "v1", "v2", "v3")
+	st.Orders = []Order{{Failing: true}}
+	st.Recovering = true
+
+	out := renderRegion(t, r, "controls", st)
+
+	want := []string{
+		"Recovering…",            // busy label
+		`class="spinner"`,        // spinner element
+		` disabled`,              // not clickable while recovering
+		"btn recover recovering", // busy class on the button
+	}
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("recovering controls output missing %q\n--- output ---\n%s", w, out)
+		}
+	}
+	if strings.Contains(out, `>Recover<`) {
+		t.Errorf("recovering controls must not show the plain Recover label\n--- output ---\n%s", out)
+	}
+}
+
 func TestRampViewFor(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -488,6 +488,18 @@
         @apply bg-amber/20;
       }
 
+      /* While the recover action runs server-side (DashboardState.Recovering, streamed
+         over SSE) the button shows a busy state: it stays amber instead of falling into
+         the muted :disabled look, shows a spinning ring, and is not clickable. */
+      .btn.recover.recovering {
+        @apply inline-flex cursor-progress items-center justify-center gap-1.5
+          border-amber bg-amber/10 text-[#fde68a] opacity-100;
+      }
+
+      .btn.recover .spinner {
+        @apply size-3 animate-spin rounded-full border-2 border-amber border-t-transparent;
+      }
+
       .btn.danger {
         @apply border-[#7f1d1d] bg-[#7f1d1d] text-white;
       }
