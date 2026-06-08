@@ -24,7 +24,7 @@ services:
       - "7233:7233" # workers & clients gRPC
       - "8233:8233" # Web UI http://localhost:8233
     healthcheck:
-      test: ["CMD-SHELL", "temporal operator cluster health"]
+      test: ["CMD-SHELL", "temporal operator cluster health --address 127.0.0.1:7233"]
       interval: 10s
       timeout: 10s
       retries: 3
