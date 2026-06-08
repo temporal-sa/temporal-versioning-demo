@@ -278,28 +278,6 @@ The on-stage flow that exercises every guarantee:
    completes cleanly. Once none remain, v3 drains and is
    sunset.
 
-## Caveat: CRD naming
-
-The `temporal-k8s` cluster runs Temporal Worker Controller
-chart **≥ 0.26.0**, which **renamed** the controller CRDs and
-no longer reconciles the old kinds. The manifests in `k8s/`
-therefore use:
-
-- `kind: WorkerDeployment` (not `TemporalWorkerDeployment`)
-- `kind: Connection` (not `TemporalConnection`)
-
-Both stay on API group/version `temporal.io/v1alpha1`; the
-field layout is otherwise identical. Verify what your cluster
-actually has before applying:
-
-```bash
-kubectl get crd | grep -i temporal
-```
-
-If, surprisingly, only the legacy `temporalworkerdeployments`
-CRD exists, switch the manifests back to the old kinds — the
-fields are the same.
-
 ## Configuration
 
 The worker reads:
