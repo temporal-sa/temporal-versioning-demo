@@ -25,12 +25,14 @@ breakage:
   colon-separated — note this differs from the dotted form in `versioning_info.version`).
   This was the root cause of the "Recover" button always reporting "Recovered 0"
   (fixed in `Recover`/`recoverQueryFor`, `internal/dashboard/actions.go`).
-  **Still-latent consequence of the same gotcha:** the reader sets
-  `LiveOrder.BuildID = pinnedBuildID(exec)` from a list result (`temporal_reader.go`),
-  so it is also always `""`; the per-version "N in flight" counts in `BuildState`
-  (`pinned[o.BuildID]`, `state.go`) collapse to one empty key and are wrong — the
-  order *labels* still render correctly only because `pickLabel` falls back to the
-  workflow's self-reported `State.Version`.
+  **Same gotcha also broke the per-version "N in flight" counts** (now fixed): the
+  reader sets `LiveOrder.BuildID = pinnedBuildID(exec)` from a list result
+  (`temporal_reader.go`), so it is also always `""`; `BuildState` used to key
+  `pinned[o.BuildID]` and so collapsed every order under one empty key, showing
+  "0 in flight" everywhere. `BuildState` now counts by the order's resolved
+  friendly label (the `pickLabel` value, which falls back to the workflow's
+  self-reported `State.Version`) instead of by build ID — never key per-order
+  aggregates on `LiveOrder.BuildID`.
 - **Ramp/promote need `AllowNoPollers: true` + `IgnoreMissingTaskQueues: true`.**
   The operator clicks ramp/promote right after shipping a new version, before
   its single poller has registered; the default `false` would reject the call
