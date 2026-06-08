@@ -29,19 +29,20 @@ var ErrNoTargetVersion = errors.New("dashboard: no target version to ramp/promot
 var ErrUnknownVersion = errors.New("dashboard: unknown version")
 
 // recoverQueryFor builds the visibility query selecting every open PizzaOrder
-// workflow pinned to the bad build. The bad-build predicate must live in the query
-// (not in a Go-side filter) because visibility — ListWorkflowExecutions — does NOT
-// populate VersioningInfo; only DescribeWorkflowExecution does. We therefore filter
-// on the built-in TemporalWorkerDeploymentVersion search attribute, whose value is
+// workflow that is NOT pinned to the current build. The not-current predicate must
+// live in the query (not in a Go-side filter) because visibility —
+// ListWorkflowExecutions — does NOT populate VersioningInfo; only
+// DescribeWorkflowExecution does. We therefore filter on the built-in
+// TemporalWorkerDeploymentVersion search attribute, whose value is
 // "<deploymentName>:<buildID>". The interpolated value is single-quote-escaped for
 // safety. The oldest-first ordering that makes truncation deterministic (oldest-stuck
 // orders recovered first) is applied in Go after paging, because the dev server's
 // standard (SQLite) visibility store does not support ORDER BY.
-func recoverQueryFor(deploymentName, badBuild string) string {
-	version := fmt.Sprintf("%s:%s", deploymentName, badBuild)
+func recoverQueryFor(deploymentName, currentBuild string) string {
+	version := fmt.Sprintf("%s:%s", deploymentName, currentBuild)
 	escaped := strings.ReplaceAll(version, "'", "''")
 	return fmt.Sprintf(
-		"WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND TemporalWorkerDeploymentVersion = '%s'",
+		"WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND TemporalWorkerDeploymentVersion != '%s'",
 		escaped,
 	)
 }
@@ -320,10 +321,10 @@ func (a *Actions) Rollback(ctx context.Context) error {
 	return nil
 }
 
-// Recover batch-resets every open order pinned to the bad (ramping/newest) build
-// and moves each onto the current build, atomically (reset-with-move).
+// Recover batch-resets every open order that is NOT on the Current build and moves
+// each onto the current build, atomically (reset-with-move).
 func (a *Actions) Recover(ctx context.Context) (int, error) {
-	bad, good, err := a.targetAndCurrent(ctx)
+	good, err := a.currentBuild(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -335,10 +336,10 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 	// ORDER BY, so we cannot rely on server-side ordering for deterministic
 	// truncation and must collect all matches before sorting. The demo's open-order
 	// set is small; maxRecoverPerCall bounds the reset RPCs, not the listing. Every
-	// execution the query returns is, by construction, pinned to the bad build, so
-	// no Go-side build filter is needed (and none is possible: visibility does not
+	// execution the query returns is, by construction, pinned to a NON-current build,
+	// so no Go-side filter is needed (and none is possible: visibility does not
 	// populate VersioningInfo).
-	query := recoverQueryFor(a.deploymentName, bad)
+	query := recoverQueryFor(a.deploymentName, good)
 	var stuck []*workflowpb.WorkflowExecutionInfo
 	var pageToken []byte
 	for {
@@ -379,9 +380,22 @@ func (a *Actions) Recover(ctx context.Context) (int, error) {
 		}
 		recovered++
 	}
-	a.logger.Info("recover completed", "badBuild", bad, "goodBuild", good,
+	a.logger.Info("recover completed", "goodBuild", good,
 		"candidates", len(stuck), "recovered", recovered)
 	return recovered, nil
+}
+
+// currentBuild returns the deployment's Current build ID from the live routing
+// config, or "" if no Current version is set.
+func (a *Actions) currentBuild(ctx context.Context) (string, error) {
+	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	if err != nil {
+		return "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+	}
+	if cv := resp.Info.RoutingConfig.CurrentVersion; cv != nil {
+		return cv.BuildID, nil
+	}
+	return "", nil
 }
 
 // resetWithMove resets the listed run to its first completed Workflow Task and
@@ -445,93 +459,4 @@ func (a *Actions) firstWorkflowTaskCompletedID(ctx context.Context, exec *common
 		}
 	}
 	return 0, fmt.Errorf("no WorkflowTaskCompleted event for %s", exec.GetWorkflowId())
-}
-
-// targetCandidate is a build considered as the recover target, paired with its
-// resolved friendly version label (e.g. "v3").
-type targetCandidate struct {
-	buildID string
-	label   string // friendly version label, e.g. "v3"
-}
-
-// selectTargetBuild picks the build to recover stuck orders FROM: the ramping
-// build if one is set, otherwise the non-current build with the highest
-// friendly version number (v3 > v2 > v1). Version NUMBER — not CreateTime — is
-// used because worker version registration order does not match semantic
-// version order (notably in local dev, where v1/v2/v3 register concurrently).
-//
-// Ties and unparseable labels are made deterministic by falling back to a
-// build-ID comparison, so the result is total and independent of input order.
-func selectTargetBuild(ramping, current string, candidates []targetCandidate) (string, error) {
-	if ramping != "" {
-		return ramping, nil
-	}
-
-	best := ""
-	bestLabel := ""
-	for _, c := range candidates {
-		if c.buildID == current {
-			continue
-		}
-		if best == "" || higherVersion(c, targetCandidate{buildID: best, label: bestLabel}) {
-			best, bestLabel = c.buildID, c.label
-		}
-	}
-	if best == "" {
-		return "", ErrNoTargetVersion
-	}
-	return best, nil
-}
-
-// higherVersion reports whether candidate a outranks b by friendly version
-// number, breaking ties (or unparseable labels) on build ID so selection is
-// deterministic regardless of input order.
-func higherVersion(a, b targetCandidate) bool {
-	if a.label != b.label {
-		return lessVersion(b.label, a.label)
-	}
-	return a.buildID > b.buildID
-}
-
-// targetAndCurrent resolves the target build (ramping if set, else the highest
-// friendly version number that is not current) and the current build from the
-// live routing config.
-func (a *Actions) targetAndCurrent(ctx context.Context) (target, current string, err error) {
-	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
-	if err != nil {
-		return "", "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
-	}
-
-	rc := resp.Info.RoutingConfig
-	if rc.CurrentVersion != nil {
-		current = rc.CurrentVersion.BuildID
-	}
-	ramping := ""
-	if rc.RampingVersion != nil {
-		ramping = rc.RampingVersion.BuildID
-	}
-
-	candidates := a.targetCandidates(ctx, resp.Info.VersionSummaries)
-	target, err = selectTargetBuild(ramping, current, candidates)
-	return target, current, err
-}
-
-// targetCandidates resolves each version summary to a friendly label, mirroring
-// versionIndex: metadata first (cached or fetched), then a CreateTime-order
-// fallback (oldest = v1) using the same CreateTime sort as versionIndex so the
-// fallback indexing matches.
-func (a *Actions) targetCandidates(ctx context.Context, summaries []client.WorkerDeploymentVersionSummary) []targetCandidate {
-	sorted := slices.Clone(summaries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreateTime.Before(sorted[j].CreateTime) })
-
-	candidates := make([]targetCandidate, 0, len(sorted))
-	for i, s := range sorted {
-		buildID := s.Version.BuildID
-		label := a.resolveLabel(ctx, buildID)
-		if label == "" {
-			label = friendly(i) // CreateTime fallback (oldest = v1)
-		}
-		candidates = append(candidates, targetCandidate{buildID: buildID, label: label})
-	}
-	return candidates
 }

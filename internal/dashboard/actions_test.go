@@ -76,83 +76,29 @@ func TestRecoverQueryFor(t *testing.T) {
 	tests := []struct {
 		name           string
 		deploymentName string
-		badBuild       string
+		currentBuild   string
 		want           string
 	}{
 		{
-			name:           "builds the bad-build predicate",
+			name:           "builds the not-current predicate",
 			deploymentName: "pizza",
-			badBuild:       "v3-local",
+			currentBuild:   "v3-local",
 			want: "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND " +
-				"TemporalWorkerDeploymentVersion = 'pizza:v3-local'",
+				"TemporalWorkerDeploymentVersion != 'pizza:v3-local'",
 		},
 		{
 			name:           "single-quote-escapes the interpolated value",
 			deploymentName: "piz'za",
-			badBuild:       "v3'local",
+			currentBuild:   "v3'local",
 			want: "WorkflowType = 'PizzaOrder' AND ExecutionStatus = 'Running' AND " +
-				"TemporalWorkerDeploymentVersion = 'piz''za:v3''local'",
+				"TemporalWorkerDeploymentVersion != 'piz''za:v3''local'",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := recoverQueryFor(tt.deploymentName, tt.badBuild); got != tt.want {
-				t.Errorf("recoverQueryFor(%q, %q) = %q, want %q", tt.deploymentName, tt.badBuild, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSelectTargetBuild(t *testing.T) {
-	tests := []struct {
-		name       string
-		ramping    string
-		current    string
-		candidates []targetCandidate
-		want       string
-		wantErr    error
-	}{
-		{
-			name:    "ramping build wins and ignores candidates",
-			ramping: "ramp-build",
-			current: "v1-local",
-			candidates: []targetCandidate{
-				{buildID: "v3-local", label: "v3"},
-			},
-			want: "ramp-build",
-		},
-		{
-			// Regression: a CreateTime heuristic would pick whatever sorts first
-			// here (v2-local), but the highest friendly version number is v3.
-			name:    "no ramp picks highest version number not slice order",
-			current: "v1-local",
-			candidates: []targetCandidate{
-				{buildID: "v2-local", label: "v2"},
-				{buildID: "v1-local", label: "v1"},
-				{buildID: "v3-local", label: "v3"},
-			},
-			want: "v3-local",
-		},
-		{
-			name:    "all candidates equal current yields ErrNoTargetVersion",
-			current: "v1-local",
-			candidates: []targetCandidate{
-				{buildID: "v1-local", label: "v1"},
-			},
-			wantErr: ErrNoTargetVersion,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := selectTargetBuild(tt.ramping, tt.current, tt.candidates)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("err = %v, want %v", err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Errorf("selectTargetBuild = %q, want %q", got, tt.want)
+			if got := recoverQueryFor(tt.deploymentName, tt.currentBuild); got != tt.want {
+				t.Errorf("recoverQueryFor(%q, %q) = %q, want %q", tt.deploymentName, tt.currentBuild, got, tt.want)
 			}
 		})
 	}
