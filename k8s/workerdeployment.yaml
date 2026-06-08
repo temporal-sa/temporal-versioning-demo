@@ -6,7 +6,6 @@ apiVersion: temporal.io/v1alpha1
 kind: WorkerDeployment
 metadata:
   name: pizza
-  namespace: default
 spec:
   replicas: 1
   workerOptions:
@@ -20,6 +19,10 @@ spec:
     deleteDelay: 5m
   template:
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: ghcr.io/alexandreroman/temporal-versioning-demo-worker:latest
@@ -28,6 +31,12 @@ spec:
             # The version shape this pod runs. Bump to v2/v3 to ship a new version.
             - name: PIZZA_VERSION
               value: v1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 50m

@@ -147,8 +147,8 @@ build: ## Build the worker and backend binaries into ./bin
 ##@ Deploy
 
 .PHONY: deploy
-deploy: ## Deploy to the temporal-k8s cluster
-	kubectl apply -k k8s/
+deploy: ## Deploy to temporal-k8s (images pinned to digests via kbld)
+	kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
 
 .PHONY: teardown
 teardown: ## Remove the demo from the cluster

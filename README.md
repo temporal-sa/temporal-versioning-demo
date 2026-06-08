@@ -130,6 +130,13 @@ build.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) and
   [Docker](https://www.docker.com/). The local stack uses
   Docker Compose v2 (`docker compose`).
+- [kbld](https://carvel.dev/kbld/) (Carvel) — `make deploy`
+  uses it to pin image tags to immutable `sha256` digests
+  before applying, so each worker Build ID maps to exactly one
+  image (see [Why pin images to
+  digests?](#why-pin-images-to-digests)). Install with
+  `brew install kbld` or follow the [kbld install
+  docs](https://carvel.dev/kbld/docs/latest/install/).
 
 ## Build & run
 
@@ -207,17 +214,22 @@ Container images are published to ghcr.io by CI:
 
 ## Deploy to the temporal-k8s cluster
 
-Apply the Kustomize manifests against the running cluster
-(images are pulled from ghcr.io):
+Deploy with `make deploy`, which resolves every image tag to
+its immutable `sha256` digest before applying:
 
 ```bash
-kubectl apply -k k8s/
+kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
 ```
 
-For convenience, `make deploy` runs `kubectl apply -k k8s/`
-and `make teardown` runs `kubectl delete -k k8s/`. Unlike the
+`make teardown` runs `kubectl delete -k k8s/`. Unlike the
 local-dev targets, these ignore `.env.local` and run against
 the host environment unchanged.
+
+Everything is created in a dedicated `pizza-tracker`
+namespace (not `default`), so add `-n pizza-tracker` to any
+`kubectl` command that inspects the demo — for example
+`kubectl -n pizza-tracker get pods -w` to watch the worker
+pods roll out.
 
 The Worker Controller runs in **Manual** strategy, so it never
 sets a Current version on its own. The backend bootstraps the
@@ -243,6 +255,30 @@ temporal worker deployment set-current-version \
 
 The dashboard is then available at
 <http://pizza.127-0-0-1.nip.io/>.
+
+### Why pin images to digests?
+
+Worker Versioning pins every in-flight workflow to the
+**Build ID** of the worker that started it, and the Worker
+Controller derives that Build ID from the **pod-template
+hash**. A mutable tag like `:latest` quietly breaks this: the
+pod template — and therefore the Build ID — stays identical
+while the image content changes underneath it, so two pods
+sharing a Build ID could run different code. That is the exact
+non-determinism Worker Versioning exists to prevent. (A pod
+that restarts and re-pulls a moved `:latest` hits the same
+trap, replaying workflows against code that no longer matches
+its Build ID.)
+
+`make deploy` therefore pipes the Kustomize output through
+[kbld](https://carvel.dev/kbld/), which rewrites each `image:`
+reference to its `…@sha256:<digest>` form, so a given Build ID
+always maps to exactly one image. Because the digest is
+immutable, the pods keep `imagePullPolicy: IfNotPresent` — a
+cached image is guaranteed to be the right code — and when the
+image content changes, the digest (hence the pod-template hash
+and Build ID) changes with it: precisely the versioning
+behaviour you want.
 
 ## Demo script
 

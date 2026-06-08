@@ -3,7 +3,6 @@ apiVersion: temporal.io/v1alpha1
 kind: Connection
 metadata:
   name: pizza-temporal
-  namespace: default
 spec:
   hostPort: temporal-frontend.temporal.svc.cluster.local:7233
   # No TLS / API key: the local temporal-k8s cluster is plaintext (dev/test only).

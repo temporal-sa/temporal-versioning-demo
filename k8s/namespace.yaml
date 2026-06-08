@@ -1,0 +1,6 @@
+# Dedicated namespace for the Pizza Tracker demo, keeping it
+# isolated from `default`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pizza-tracker
