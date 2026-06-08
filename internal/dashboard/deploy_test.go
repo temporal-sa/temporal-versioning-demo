@@ -38,6 +38,73 @@ func rampingState(rampingLabel string, rampPct int, currentLabel string, labels 
 	return DashboardState{Versions: cards}
 }
 
+// renderRegion renders a named SSE region to a string, failing the test on error.
+func renderRegion(t *testing.T, r *Renderer, region string, state DashboardState) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := r.Region(&buf, region, state); err != nil {
+		t.Fatalf("render %q: %v", region, err)
+	}
+	return buf.String()
+}
+
+func TestHasRamping(t *testing.T) {
+	tests := []struct {
+		name  string
+		state DashboardState
+		want  bool
+	}{
+		{"true when a version is ramping", rampingState("v3", 25, "v2", "v1", "v2", "v3"), true},
+		{"false when only current and inactive", versionsState("v2", "v1", "v2", "v3"), false},
+		{"false for empty slice", DashboardState{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasRamping(tt.state.Versions); got != tt.want {
+				t.Errorf("hasRamping() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRendererControls(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	// Deploy and Recover always render; only Rollback's disabled attribute varies.
+	always := []string{
+		`hx-get="/api/deploy-modal"`, // Deploy
+		`onclick="openRollback()"`,   // Rollback
+		`hx-post="/api/recover"`,     // Recover
+	}
+
+	t.Run("rollback disabled without a ramp", func(t *testing.T) {
+		out := renderRegion(t, r, "controls", versionsState("v2", "v1", "v2", "v3"))
+		for _, w := range always {
+			if !strings.Contains(out, w) {
+				t.Errorf("controls output missing %q\n--- output ---\n%s", w, out)
+			}
+		}
+		if !strings.Contains(out, ` disabled`) {
+			t.Errorf("Rollback should be disabled without a ramp\n--- output ---\n%s", out)
+		}
+	})
+
+	t.Run("rollback enabled while ramping", func(t *testing.T) {
+		out := renderRegion(t, r, "controls", rampingState("v3", 25, "v2", "v1", "v2", "v3"))
+		for _, w := range always {
+			if !strings.Contains(out, w) {
+				t.Errorf("controls output missing %q\n--- output ---\n%s", w, out)
+			}
+		}
+		if strings.Contains(out, ` disabled`) {
+			t.Errorf("Rollback should be enabled while ramping\n--- output ---\n%s", out)
+		}
+	})
+}
+
 func TestRampViewFor(t *testing.T) {
 	tests := []struct {
 		name        string

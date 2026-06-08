@@ -602,14 +602,12 @@
           <div class="sect">Deployment</div>
           <div id="versions" sse-swap="versions"></div>
 
-          <div class="controls">
-            <button class="btn primary" type="button"
-                    hx-get="/api/deploy-modal" hx-target="#deploy-modal-content" hx-swap="innerHTML"
-                    hx-on::after-request="if (event.detail.successful) openDeploy()">Deploy</button>
-            <button class="btn danger" type="button" onclick="openRollback()">Rollback</button>
-            <button class="btn" type="button"
-                    hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast">Recover</button>
-          </div>
+          <!-- Controls row, streamed server-side via SSE (sse-swap="controls")
+               and morphed in place like #orders, so button nodes, htmx bindings
+               and focus are preserved. The server re-renders all three buttons
+               every frame; Rollback carries the disabled attribute unless a
+               version is currently ramping. -->
+          <div class="controls" id="controls" sse-swap="controls" hx-swap="morph:innerHTML"></div>
         </aside>
       </div>
     </div>

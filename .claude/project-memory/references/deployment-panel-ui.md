@@ -12,6 +12,14 @@ HTMX-rendered Deploy modal — see [[deploy-modal-htmx]]), **Rollback** (POST
 `/api/rollback`), **Recover** (POST `/api/recover`, htmx). There is no KPI
 band — it was removed, so there is no global "In flight" total any more.
 
+The controls row is itself a **server-rendered SSE region** (`#controls`,
+`sse-swap="controls"`, `hx-swap="morph:innerHTML"`): the server renders all
+three buttons every frame (`controls` template in `dashboard.tmpl`) and
+idiomorph morphs only changed attributes in place. **Rollback is `disabled`
+unless a version is currently Ramping** — gated server-side via the
+`hasRamping([]VersionCard)` funcMap helper (`{{if not (hasRamping .Versions)}}
+disabled{{end}}`), since rollback only makes sense while a ramp is in flight.
+
 Each version card is sorted **v1 → v2 → v3** and shows only an in-progress
 count: `{{.PinnedCount}} in flight`. Version cards deliberately show **no
 failure / "failing" count**.
@@ -26,5 +34,5 @@ count.
 **How to apply:** do not re-introduce a failure/"failing" count on the version
 cards or a global In-flight KPI. Keep the cards to badge + status chip + traffic
 bar + `N in flight`. The Deploy modal keeps only Cancel + Apply (Rollback is the
-standalone button, not a modal action). SSE regions are `orders` and `versions`
-only. See also [[worker-versioning-model]] and [[frontend-rules]].
+standalone button, not a modal action). SSE regions are `orders`, `versions`,
+and `controls`. See also [[worker-versioning-model]] and [[frontend-rules]].

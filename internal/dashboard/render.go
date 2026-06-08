@@ -173,7 +173,19 @@ func funcMap() template.FuncMap {
 		"stepNodes":    stepNodes,
 		"stepperStyle": stepperStyle,
 		"barWidth":     barWidth,
+		"hasRamping":   hasRamping,
 	}
+}
+
+// hasRamping reports whether any version card is currently ramping. The controls
+// template uses it to enable the Rollback button only while a ramp is in flight.
+func hasRamping(versions []VersionCard) bool {
+	for _, c := range versions {
+		if c.Status == StatusRamping {
+			return true
+		}
+	}
+	return false
 }
 
 // versionClass maps a friendly version to its badge color class (b-v1/b-v2/b-v3),
