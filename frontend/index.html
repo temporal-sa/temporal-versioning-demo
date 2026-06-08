@@ -477,6 +477,17 @@
         @apply border-amber text-[#fde68a];
       }
 
+      /* Recover lights up amber when enabled (i.e. orders are failing); when
+         disabled it falls back to the muted plain .btn, so enabled vs disabled
+         read clearly apart. */
+      .btn.recover:not(:disabled) {
+        @apply border-amber bg-amber/10 text-[#fde68a];
+      }
+
+      .btn.recover:hover:not(:disabled) {
+        @apply bg-amber/20;
+      }
+
       .btn.danger {
         @apply border-[#7f1d1d] bg-[#7f1d1d] text-white;
       }
@@ -601,8 +612,9 @@
           <!-- Controls row, streamed server-side via SSE (sse-swap="controls")
                and morphed in place like #orders, so button nodes, htmx bindings
                and focus are preserved. The server re-renders all three buttons
-               every frame; Rollback carries the disabled attribute unless a
-               version is currently ramping. -->
+               every frame. Rollback carries the disabled attribute unless a
+               version is currently ramping; Recover carries it (and loses its
+               amber highlight) unless an order is currently failing. -->
           <div class="controls" id="controls" sse-swap="controls" hx-swap="morph:innerHTML"></div>
         </aside>
       </div>

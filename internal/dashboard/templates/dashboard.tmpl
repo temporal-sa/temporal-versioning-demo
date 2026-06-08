@@ -52,7 +52,7 @@
 <button class="btn danger" type="button"
         hx-get="/api/rollback-modal" hx-target="#modal-host" hx-swap="innerHTML"
         hx-target-error="#toast"{{if not (hasRamping .Versions)}} disabled{{end}}>Rollback</button>
-<button class="btn" type="button"
+<button class="btn recover" type="button"
         hx-post="/api/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast"{{if not (hasFailing .Orders)}} disabled{{end}}>Recover</button>
 {{- end -}}
 
