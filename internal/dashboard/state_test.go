@@ -55,6 +55,49 @@ func TestBuildStateLabelsByCreateTimeAndCountsPinned(t *testing.T) {
 	}
 }
 
+// Regression for the "0 in flight" bug: in production, ListWorkflowExecutions
+// (visibility) never populates VersioningInfo, so every LiveOrder.BuildID is "".
+// Counting by BuildID then buckets all orders under the empty key, leaving every
+// card at PinnedCount 0. Counts must instead key off the resolved friendly label
+// (which falls back to the workflow's self-reported State.Version).
+func TestBuildStateCountsPinnedByLabelWhenVisibilityOmitsBuildID(t *testing.T) {
+	base := time.Unix(1_000_000, 0)
+	summaries := []dashboard.VersionSummary{
+		{BuildID: "b1", CreateTime: base, PizzaVersion: "v1"},
+		{BuildID: "b2", CreateTime: base.Add(2 * time.Minute), PizzaVersion: "v2"},
+		{BuildID: "b3", CreateTime: base.Add(4 * time.Minute), PizzaVersion: "v3", Draining: true},
+	}
+	routing := dashboard.Routing{CurrentBuildID: "b2", RampingBuildID: "b3", RampingPct: 10}
+	// Visibility omits the build ID, but each order self-reports its version.
+	orders := []dashboard.LiveOrder{
+		{WorkflowID: "order-1", State: pizza.OrderState{
+			Version: "v2", Pizza: "Pepperoni", Steps: pizza.StepsFor(pizza.V2), CurrentStep: 1,
+		}},
+		{WorkflowID: "order-2", State: pizza.OrderState{
+			Version: "v2", Pizza: "Marinara", Steps: pizza.StepsFor(pizza.V2), CurrentStep: 0,
+		}},
+		{WorkflowID: "order-3", State: pizza.OrderState{
+			Version: "v3", Pizza: "Diavola", Steps: pizza.StepsFor(pizza.V3), CurrentStep: 3, Failing: true,
+		}},
+	}
+
+	st := dashboard.BuildState(routing, summaries, orders)
+
+	byVer := map[string]dashboard.VersionCard{}
+	for _, c := range st.Versions {
+		byVer[c.Version] = c
+	}
+	if byVer["v1"].PinnedCount != 0 {
+		t.Errorf("v1 PinnedCount = %d, want 0 (no orders)", byVer["v1"].PinnedCount)
+	}
+	if byVer["v2"].PinnedCount != 2 {
+		t.Errorf("v2 PinnedCount = %d, want 2", byVer["v2"].PinnedCount)
+	}
+	if byVer["v3"].PinnedCount != 1 {
+		t.Errorf("v3 PinnedCount = %d, want 1", byVer["v3"].PinnedCount)
+	}
+}
+
 func TestBuildStateLabelsByMetadataWhenPresent(t *testing.T) {
 	base := time.Unix(1_000_000, 0)
 	// CreateTime order would label b_new=v1, but metadata says it is v3.

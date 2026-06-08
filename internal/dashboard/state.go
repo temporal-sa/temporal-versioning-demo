@@ -92,13 +92,19 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 		}
 	}
 
-	pinned := make(map[string]int, len(sorted)) // buildID -> open order count
+	// Count open orders by their resolved friendly label, not by BuildID:
+	// visibility (ListWorkflowExecutions) never populates VersioningInfo, so
+	// o.BuildID is "" in production and keying on it buckets every order under
+	// the empty key. The label falls back to the workflow's self-reported
+	// State.Version, which is the same value the cards resolve to.
+	pinned := make(map[string]int, len(sorted)) // friendly label -> open order count
 	outOrders := make([]Order, 0, len(orders))
 	for _, o := range orders {
-		pinned[o.BuildID]++
+		version := pickLabel(label, o.BuildID, o.State.Version)
+		pinned[version]++
 		outOrders = append(outOrders, Order{
 			ID:          o.WorkflowID,
-			Version:     pickLabel(label, o.BuildID, o.State.Version),
+			Version:     version,
 			Pizza:       o.State.Pizza,
 			Steps:       o.State.Steps,
 			CurrentStep: o.State.CurrentStep,
@@ -113,7 +119,7 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 		card := VersionCard{
 			Version:     label[s.BuildID],
 			BuildID:     s.BuildID,
-			PinnedCount: pinned[s.BuildID],
+			PinnedCount: pinned[label[s.BuildID]],
 			Status:      StatusInactive,
 		}
 		switch {
