@@ -55,7 +55,7 @@ dev: infra-up dev-stop ## Start Temporal + backend + workers v1/v2/v3, all hot-r
 	@echo "Dashboard with live reload: http://localhost:8090"
 	@trap 'kill 0' EXIT INT TERM HUP; \
 		( TEMPORAL_ADDRESS=$(TEMPORAL_ADDRESS) TEMPORAL_NAMESPACE=$(TEMPORAL_NAMESPACE) \
-			PIZZA_DEPLOYMENT_NAME=$(DEPLOYMENT_NAME) PIZZA_TASK_QUEUE=$(PIZZA_TASK_QUEUE) \
+			TEMPORAL_DEPLOYMENT_NAME=$(DEPLOYMENT_NAME) PIZZA_TASK_QUEUE=$(PIZZA_TASK_QUEUE) \
 			air -c .air.toml; kill 0 ) & \
 		for v in v1 v2 v3; do \
 			( $(WORKER_ENV) PIZZA_VERSION=$$v TEMPORAL_WORKER_BUILD_ID=$$v-local \

@@ -29,9 +29,10 @@ namespace so it lives in exactly one place.
 - The Worker Controller names the Temporal Worker Deployment
   `<k8s-namespace>/<WorkerDeployment-name>` (it injects
   `TEMPORAL_DEPLOYMENT_NAME=pizza-tracker/pizza-worker` into the worker).
-  So the backend's `PIZZA_DEPLOYMENT_NAME` MUST carry the namespace
-  prefix or it logs "no Worker Deployment found". Don't hardcode it:
-  `backend.yaml` derives `POD_NAMESPACE` via the Downward API
+  The backend reads the same `TEMPORAL_DEPLOYMENT_NAME` var, which MUST carry
+  the namespace prefix or it logs "no Worker Deployment found". The backend is a
+  plain Deployment (not controller-managed), so it sets the var itself: don't
+  hardcode it — `backend.yaml` derives `POD_NAMESPACE` via the Downward API
   (`fieldRef metadata.namespace`) and sets
-  `PIZZA_DEPLOYMENT_NAME: $(POD_NAMESPACE)/pizza-worker` (K8s expands
+  `TEMPORAL_DEPLOYMENT_NAME: $(POD_NAMESPACE)/pizza-worker` (K8s expands
   `$(VAR)` from an env defined earlier in the list).
