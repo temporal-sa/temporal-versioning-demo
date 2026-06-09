@@ -50,10 +50,10 @@
 {{- end -}}
 
 {{- define "controls" -}}
-{{- /* . is a DashboardState. Rollback is disabled unless a version is ramping. */ -}}
+{{- /* . is a DashboardState. Deploy is disabled with fewer than two versions; Rollback is disabled unless a version is ramping. */ -}}
 <button class="btn primary" type="button"
         hx-get="/deploy" hx-target="#modal-host" hx-swap="innerHTML"
-        hx-target-error="#toast">Deploy</button>
+        hx-target-error="#toast"{{if not (hasMultipleVersions .Versions)}} disabled{{end}}>Deploy</button>
 <button class="btn danger" type="button"
         hx-get="/rollback" hx-target="#modal-host" hx-swap="innerHTML"
         hx-target-error="#toast"{{if not (hasRamping .Versions)}} disabled{{end}}>Rollback</button>

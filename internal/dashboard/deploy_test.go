@@ -93,9 +93,10 @@ func TestRendererControls(t *testing.T) {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	// Deploy and Rollback always render; Rollback carries a disabled attribute
-	// immediately before its label, so assert on the precise `disabled>Rollback` markup.
-	// Recover is no longer a control here — it is now a per-card action.
+	// Deploy and Rollback always render; each carries a disabled attribute
+	// immediately before its label, so assert on the precise `disabled>Deploy`
+	// and `disabled>Rollback` markup. Recover is no longer a control here — it is
+	// now a per-card action.
 	always := []string{
 		`hx-get="/deploy"`,   // Deploy opens the modal host
 		`hx-get="/rollback"`, // Rollback opens the modal host
@@ -104,17 +105,26 @@ func TestRendererControls(t *testing.T) {
 	tests := []struct {
 		name             string
 		state            DashboardState
+		deployDisabled   bool
 		rollbackDisabled bool
 	}{
 		{
 			name:             "no ramp disables rollback",
 			state:            versionsState("v2", "v1", "v2", "v3"),
+			deployDisabled:   false,
 			rollbackDisabled: true,
 		},
 		{
 			name:             "ramping enables rollback",
 			state:            rampingState("v3", 25, "v2", "v1", "v2", "v3"),
+			deployDisabled:   false,
 			rollbackDisabled: false,
+		},
+		{
+			name:             "single version disables deploy",
+			state:            versionsState("v1", "v1"),
+			deployDisabled:   true,
+			rollbackDisabled: true,
 		},
 	}
 
@@ -125,6 +135,9 @@ func TestRendererControls(t *testing.T) {
 				if !strings.Contains(out, w) {
 					t.Errorf("controls output missing %q\n--- output ---\n%s", w, out)
 				}
+			}
+			if got := strings.Contains(out, `disabled>Deploy`); got != tt.deployDisabled {
+				t.Errorf("Deploy disabled = %v, want %v\n--- output ---\n%s", got, tt.deployDisabled, out)
 			}
 			if got := strings.Contains(out, `disabled>Rollback`); got != tt.rollbackDisabled {
 				t.Errorf("Rollback disabled = %v, want %v\n--- output ---\n%s", got, tt.rollbackDisabled, out)

@@ -197,12 +197,13 @@ func (r *Renderer) DeployRamp(w io.Writer, view rampView) error {
 // funcMap ports the app.js rendering helpers into template functions.
 func funcMap() template.FuncMap {
 	return template.FuncMap{
-		"versionClass": versionClass,
-		"elapsed":      formatElapsed,
-		"stepNodes":    stepNodes,
-		"stepperStyle": stepperStyle,
-		"barWidth":     barWidth,
-		"hasRamping":   hasRamping,
+		"versionClass":        versionClass,
+		"elapsed":             formatElapsed,
+		"stepNodes":           stepNodes,
+		"stepperStyle":        stepperStyle,
+		"barWidth":            barWidth,
+		"hasRamping":          hasRamping,
+		"hasMultipleVersions": hasMultipleVersions,
 	}
 }
 
@@ -215,6 +216,13 @@ func hasRamping(versions []VersionCard) bool {
 		}
 	}
 	return false
+}
+
+// hasMultipleVersions reports whether at least two worker versions are known.
+// The controls template uses it to disable the Deploy button when only one
+// version exists (deploying/ramping needs a second version to target).
+func hasMultipleVersions(versions []VersionCard) bool {
+	return len(versions) > 1
 }
 
 // versionClass maps a friendly version to its badge color class (b-v1/b-v2/b-v3),
