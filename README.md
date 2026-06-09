@@ -278,14 +278,76 @@ label means starting v1 / v2 / v3 together never promotes an
 arbitrary build — orders start flowing on v1 as soon as its
 worker registers, with no manual promote.
 
-If you ever need to set the Current version by hand (e.g. to
-recover), use the **Promote** button in the UI or the CLI:
+### Driving rollouts from the CLI
+
+The Deploy modal's ramp / promote / rollback actions map to
+`temporal worker deployment` commands, so you can drive the same
+rollout from a terminal instead of the UI.
+
+The cluster exposes Temporal's gRPC API through the Traefik
+Gateway, keyed on the `temporal.127-0-0-1.nip.io` hostname, so the
+CLI's default `127.0.0.1:7233` returns a 404. Point the CLI at
+that host (it also resolves to 127.0.0.1) for every command below:
 
 ```bash
-# Get the build id, then promote it:
-temporal worker deployment describe --deployment-name pizza-tracker/pizza-worker
+export TEMPORAL_ADDRESS=temporal.127-0-0-1.nip.io:7233
+```
+
+Read the registered Build IDs — note `describe` takes `--name`,
+while the `set-*` commands take `--deployment-name`:
+
+```bash
+temporal worker deployment describe --name pizza-tracker/pizza-worker
+```
+
+`describe` shows opaque Build IDs, not the friendly `v1`/`v2`/`v3`
+labels — those live in each version's `pizzaVersion` metadata,
+published by the worker and read with `describe-version`. To list
+every Build ID with its version label:
+
+```bash
+DN=pizza-tracker/pizza-worker
+temporal worker deployment describe --name "$DN" -o json \
+  | jq -r '.versionSummaries[].BuildID' \
+  | while read -r b; do
+      v=$(temporal worker deployment describe-version \
+            --deployment-name "$DN" --build-id "$b" -o json \
+          | jq -r '.metadata.pizzaVersion.data | @base64d | fromjson')
+      echo "$v  $b"
+    done
+```
+
+The metadata value is a Temporal payload (`json/plain`-encoded),
+hence the `@base64d | fromjson` in `jq` (the label is at the
+top-level `.metadata.pizzaVersion.data`). Use the matching Build ID
+as `<v2-build-id>` in the commands below.
+
+**Ramp** a version — e.g. send 25% of new orders to v2 (the
+equivalent of moving the slider). `--percentage` is in `[0,100]`,
+and ramping to 100 does *not* promote. Add
+`--ignore-missing-task-queues` / `--allow-no-pollers` when a
+freshly shipped version is not yet polling every task queue:
+
+```bash
+temporal worker deployment set-ramping-version \
+  --deployment-name pizza-tracker/pizza-worker \
+  --build-id <v2-build-id> --percentage 25
+```
+
+**Promote** to Current for a full cutover (the **Promote**
+button / reaching the 100% stop):
+
+```bash
 temporal worker deployment set-current-version \
-  --deployment-name pizza-tracker/pizza-worker --build-id <v1-build-id>
+  --deployment-name pizza-tracker/pizza-worker --build-id <v2-build-id>
+```
+
+**Rollback** — drop the ramp so new orders snap back to Current:
+
+```bash
+temporal worker deployment set-ramping-version \
+  --deployment-name pizza-tracker/pizza-worker \
+  --build-id <v2-build-id> --delete
 ```
 
 ### Why pin images to digests?

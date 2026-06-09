@@ -27,7 +27,16 @@ runtime failure, not a compile error, so they are easy to reintroduce by
 - **Ramp/promote need `AllowNoPollers: true` + `IgnoreMissingTaskQueues: true`.**
   The operator ramps/promotes right after shipping a version, before its poller has
   registered; the default would reject the call with `FailedPrecondition`.
+- **CLI flag asymmetry: `describe` takes `--name`, `set-*` take `--deployment-name`.**
+  `temporal worker deployment describe` uses `--name <deployment>`, while
+  `set-current-version` and `set-ramping-version` use `--deployment-name <deployment>`.
+  Easy to "tidy" into one consistent flag and break the command. CLI ramp/promote
+  also need `--ignore-missing-task-queues` / `--allow-no-pollers` (same reason as
+  above); `set-ramping-version --percentage` is `[0,100]` and 100 does NOT promote;
+  rollback = `set-ramping-version ... --delete`. Documented in README "Driving
+  rollouts from the CLI".
 
 **How to apply:** keep the deployment name dot-free, never add `ORDER BY` to a
-visibility query, never read `VersioningInfo` off a list result, and keep the
-no-poller flags on ramp/promote. See [[worker-versioning-model]].
+visibility query, never read `VersioningInfo` off a list result, keep the
+no-poller flags on ramp/promote, and remember `describe` is `--name` while `set-*`
+is `--deployment-name`. See [[worker-versioning-model]].
