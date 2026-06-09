@@ -16,7 +16,7 @@ at apply time. Manifests keep human-readable tags (the worker base is now
 Note: **all** deploy paths go through kbld now. `make deploy` pins the `:v1`
 base (`k8s/base`); `make deploy-v2`/`deploy-v3` apply kustomize overlays
 (`kubectl kustomize k8s/vN | kbld -f - | kubectl apply -f -`) so v2/v3 are
-digest-pinned too. See [[version-shipping-kubectl-patch]].
+digest-pinned too. See [[version-shipping-overlays]].
 
 **Why:** with Worker Versioning the controller derives the Build ID from the
 pod-template hash. A mutable `:latest` keeps the pod template (hence Build ID)

@@ -7,7 +7,7 @@
 > confirmed.
 
 - [Worker versioning model](references/worker-versioning-model.md) — three version-tagged worker images, shape baked at build (`PIZZA_VERSION`); all Pinned; workers publish a `pizzaVersion` label; manual UI routing; bootstrap promotes the v1-labelled version.
-- [Version shipping via kustomize base + sibling overlays](references/version-shipping-kubectl-patch.md) — base `k8s/base`; `deploy-v2`/`-v3` apply sibling overlays `k8s/vN` (resource `../base` + `images: newTag`) through kbld; `deploy-v1` = base; the sibling layout (not `k8s/` root) avoids the ancestor-cycle.
+- [Version shipping via kustomize base + sibling overlays](references/version-shipping-overlays.md) — base `k8s/base`; `deploy-v2`/`-v3` apply sibling overlays `k8s/vN` (resource `../base` + `images: newTag`) through kbld; `deploy-v1` = base; the sibling layout (not `k8s/` root) avoids the ancestor-cycle.
 - [kbld digest pinning for deploy determinism](references/kbld-digest-pinning.md) — every deploy path pipes kustomize through kbld to digest-pin images, so each Build ID maps to one image; pods keep `IfNotPresent`.
 - [Prefer short Makefile target names](references/makefile-target-naming.md) — terse targets (`app-vN`, `deploy-vN`); host dev is `make dev` only and runs backend + 3 workers under Air (every component hot-reloads); no alias-only targets.
 - [Write project memory in the present tense](references/memory-writing-style.md) — notes state the current truth, not a changelog of what changed; drop "was added/removed", before/after anecdotes.

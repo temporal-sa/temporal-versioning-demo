@@ -23,4 +23,4 @@ hot-reload for every component.
 **How to apply:** favour terse target names over long descriptive ones, and
 never add an alias target that merely duplicates another. Keep all four host
 components (backend + three workers) under Air — never run workers via `go run`.
-See [[version-shipping-kubectl-patch]] and [[memory-writing-style]].
+See [[version-shipping-overlays]] and [[memory-writing-style]].
