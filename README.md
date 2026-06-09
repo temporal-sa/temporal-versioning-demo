@@ -228,12 +228,13 @@ Kustomize set, resolves every image tag to its immutable
 `sha256` digest with kbld, and applies the result:
 
 ```bash
-kubectl kustomize k8s/base | kbld -f - | kubectl apply -f -
+make deploy     # install the demo (worker v1 + backend)
+make teardown   # remove the demo from the cluster
 ```
 
-`make teardown` runs `kubectl delete -k k8s/base`. Unlike the
-local-dev targets, these ignore `.env.local` and run against
-the host environment unchanged.
+Unlike the local-dev targets, `make deploy` and `make teardown`
+ignore `.env.local` and run against the host environment
+unchanged.
 
 ### What gets deployed
 
@@ -274,7 +275,9 @@ pod-template change yields a new Build ID. The overlay output is
 digest-pinned through kbld at apply time, exactly like the base:
 
 ```bash
-kubectl kustomize k8s/v2 | kbld -f - | kubectl apply -f -
+make deploy-v2   # ship v2
+make deploy-v3   # ship v3
+make deploy-v1   # roll back to the v1 base
 ```
 
 Run `make deploy` once first to create the demo.
