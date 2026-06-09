@@ -11,11 +11,8 @@ permissions:
   packages: write
 
 env:
-  # Run JS-based actions on Node 24. GitHub deprecated the Node 20 runtime
-  # (default flips 2026-06-16, removed 2026-09-16). Most actions in this
-  # workflow are pinned to Node-24 majors; this flag also covers
-  # actions/upload-artifact and actions/download-artifact, which have no
-  # Node-24 release yet.
+  # Force JS actions onto Node 24 while some actions still default to the
+  # deprecated Node 20 runtime.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:

@@ -104,12 +104,10 @@ graph TD
   IDs.
 - **Temporal Server + Worker Controller** — the controller
   runs in **Manual** strategy and manages the versioned
-  worker pods. The worker binary compiles all three workflow
-  shapes, but each image bakes one shape at build time, so the
-  worker is published as three version-tagged images
-  (`:v1`/`:v2`/`:v3`). The controller derives a Build ID from
-  the pod-template hash, so shipping a new version is just a
-  pod-template change — repointing the image tag to `:v2`/`:v3`.
+  worker pods. Each image bakes one shape (see [The three
+  versions](#the-three-versions)); the controller derives a
+  Build ID from the pod-template hash, so shipping a version is
+  just an image-tag change to `:v2`/`:v3`.
 
 Routing actions map to the Temporal API as follows: ramp →
 `SetRampingVersion`, promote → `SetCurrentVersion`, rollback →
@@ -118,15 +116,15 @@ Current version is set), and recover → a per-order
 reset-with-move that re-pins each stuck order to the Current
 build.
 
-| Module           | Description                                          |
-| ---------------- | ---------------------------------------------------- |
-| `cmd/worker`     | Versioned Temporal worker (Pinned behaviour).        |
-| `cmd/backend`    | REST + SSE API, state poller, actions, generator.    |
-| `internal/pizza` | Pizza workflows, activities and shared types.        |
-| `internal/dashboard` | State model, poller, actions, SSE hub, server.   |
-| `frontend`       | Single-page Pizza Tracker dashboard.                 |
-| `k8s/base`       | Kustomize base manifests for the demo deployment.    |
-| `k8s/v2`, `k8s/v3` | Version overlays that ship the v2/v3 worker.       |
+| Module                 | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `cmd/worker`           | Versioned Temporal worker (Pinned behaviour).      |
+| `cmd/backend`          | REST + SSE API, state poller, actions, generator.  |
+| `internal/pizza`       | Pizza workflows, activities and shared types.      |
+| `internal/dashboard`   | State model, poller, actions, SSE hub, server.     |
+| `frontend`             | Single-page Pizza Tracker dashboard.               |
+| `k8s/base`             | Kustomize base manifests for the demo deployment.  |
+| `k8s/v2`, `k8s/v3`     | Version overlays that ship the v2/v3 worker.       |
 
 ## Prerequisites
 
@@ -165,16 +163,11 @@ You can run the whole demo on your machine without a cluster.
 Both flows below start a Temporal dev server in Docker via
 Compose, so no `temporal-k8s` cluster is required.
 
-In both cases the Worker Controller and its **Manual**
-strategy are not in play locally. The backend handles the
-bootstrap instead: on startup it promotes the version a worker
-has labelled **v1** in its Worker Deployment Version metadata,
-and **waits** for that metadata before promoting (only when no
-Current is set yet). Because it keys off the published label,
-starting v1 / v2 / v3 together never promotes an arbitrary
-build — orders always start flowing on v1, with no manual step.
-Shipping and routing the later versions (v2 / v3) stays
-manual — see the [Demo script](#demo-script).
+Locally the Worker Controller is not in play; the backend
+bootstraps v1 itself — see [Bootstrapping the first
+version](#bootstrapping-the-first-version). Shipping and routing
+the later versions (v2 / v3) stays manual — see the [Demo
+script](#demo-script).
 
 **Host hot-reload flow** — runs the backend and worker on the
 host with hot reload, ideal for iterating on code:
@@ -247,13 +240,21 @@ Everything lands in a dedicated `pizza-tracker` namespace (not
 that inspects the demo (e.g. `kubectl -n pizza-tracker get pods
 -w`). The Kustomize set under `k8s/base` creates:
 
-| Resource | Name | Role |
-| -------- | ---- | ---- |
-| `Namespace` | `pizza-tracker` | Isolates the demo from `default`. |
-| `Connection` | `pizza-temporal` | Points the worker at the in-cluster Temporal frontend (`temporal-frontend.temporal.svc.cluster.local:7233`, plaintext). |
-| `WorkerDeployment` | `pizza-worker` | Versioned worker, managed by the Worker Controller (Manual strategy). Registered in Temporal as `pizza-tracker/pizza-worker` (`<namespace>/<name>`). |
-| `Deployment` + `Service` | `pizza-backend` | Dashboard backend (SSE + hypermedia API), served in-cluster on port 80. |
-| `HTTPRoute` | `pizza-tracker` | Routes `pizza.127-0-0-1.nip.io` through the Traefik Gateway to the backend. |
+- **`Namespace` `pizza-tracker`** — isolates the demo from
+  `default`.
+- **`Connection` `pizza-temporal`** — points the worker at the
+  in-cluster Temporal frontend
+  (`temporal-frontend.temporal.svc.cluster.local:7233`,
+  plaintext).
+- **`WorkerDeployment` `pizza-worker`** — versioned worker,
+  managed by the Worker Controller (Manual strategy). Registered
+  in Temporal as `pizza-tracker/pizza-worker`
+  (`<namespace>/<name>`).
+- **`Deployment` + `Service` `pizza-backend`** — dashboard
+  backend (SSE + hypermedia API), served in-cluster on port 80.
+- **`HTTPRoute` `pizza-tracker`** — routes
+  `pizza.127-0-0-1.nip.io` through the Traefik Gateway to the
+  backend.
 
 Both pods run as non-root from distroless images with a
 hardened `securityContext`, and their images are pinned to
@@ -402,13 +403,10 @@ to be the right code — and when the image content changes, the
 digest (hence the pod-template hash and Build ID) changes with
 it: precisely the versioning behaviour you want.
 
-`make deploy-v2` / `make deploy-v3` ship a later version the
-same way: the `k8s/vN` overlay repoints the worker image to
-the immutable per-version tag `:vN`, then the same kbld pass
-pins it to a digest before applying. Each tag is already
-content-addressed (it bakes a distinct `PIZZA_VERSION` and so
-resolves to a distinct digest), so the result keeps the same
-one-Build-ID-per-image guarantee as the base.
+`make deploy-v2` / `make deploy-v3` go through the same kbld
+pass, so each per-version tag is pinned to a digest the same way
+(see [Shipping versions and rolling
+back](#shipping-versions-and-rolling-back)).
 
 ## Demo script
 
