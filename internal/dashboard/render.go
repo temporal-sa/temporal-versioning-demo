@@ -201,7 +201,7 @@ func funcMap() template.FuncMap {
 		"elapsed":             formatElapsed,
 		"stepNodes":           stepNodes,
 		"stepperStyle":        stepperStyle,
-		"barWidth":            barWidth,
+		"barWidth":            func(pct int) int { return max(0, min(100, pct)) },
 		"hasRamping":          hasRamping,
 		"hasMultipleVersions": hasMultipleVersions,
 	}
@@ -285,22 +285,6 @@ func stepperFillPct(o Order) int {
 	if o.Done {
 		filled = n - 1
 	}
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > n-1 {
-		filled = n - 1
-	}
+	filled = max(0, min(n-1, filled))
 	return filled * 100 / (n - 1)
-}
-
-// barWidth clamps the traffic percentage to [0,100] for the version bar width.
-func barWidth(pct int) int {
-	if pct < 0 {
-		return 0
-	}
-	if pct > 100 {
-		return 100
-	}
-	return pct
 }
