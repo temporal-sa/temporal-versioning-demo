@@ -21,6 +21,8 @@ recovered with zero non-determinism errors.
 
 ## What it demonstrates
 
+https://github.com/user-attachments/assets/6e175c36-3f42-43e8-bf04-d387328d8d10
+
 Temporal Worker Versioning lets you ship new worker code
 without breaking running workflows. This demo makes each
 guarantee visible on a live dashboard:
