@@ -1,8 +1,7 @@
 # Versioned pizza worker, managed by the Temporal Worker Controller.
 # Manual strategy: new versions stay Inactive until the UI promotes/ramps them.
-# Ship a new version by changing the image TAG to :v2/:v3 in this pod template
-# (each tag bakes its own PIZZA_VERSION) — the controller derives a new Build ID
-# from the pod-template hash.
+# Ship a new version by changing the image TAG to :v2/:v3 in this pod template —
+# the controller derives a new Build ID from the pod-template hash.
 apiVersion: temporal.io/v1alpha1
 kind: WorkerDeployment
 metadata:
