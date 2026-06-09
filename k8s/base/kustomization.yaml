@@ -1,7 +1,7 @@
 # Kustomize entry point for the Pizza Tracker demo.
 # Apply against the running temporal-k8s Kind cluster:
 #
-#   kubectl apply -k k8s/
+#   kubectl apply -k k8s/base
 #
 # Container images are published to ghcr.io/alexandreroman/<image>.
 apiVersion: kustomize.config.k8s.io/v1beta1

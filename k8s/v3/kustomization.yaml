@@ -1,0 +1,11 @@
+# Ship the v3 worker: the base demo stack with the worker image repointed to the
+# immutable :v3 tag (kbld digest-pins it at apply time; see Makefile deploy-v3).
+# A sibling overlay (references ../base, not an ancestor) to avoid the kustomize
+# ancestor-cycle that a base-at-k8s-root layout caused.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+images:
+  - name: ghcr.io/alexandreroman/temporal-versioning-demo-worker
+    newTag: v3

@@ -16,6 +16,11 @@ RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
 
 # --- runtime stage ---
 FROM gcr.io/distroless/static-debian12:nonroot
+# Bake the workflow shape this image runs (v1/v2/v3). A runtime env var still
+# overrides it (used by local dev / compose); in K8s the manifests no longer set
+# PIZZA_VERSION — the image tag carries the version.
+ARG PIZZA_VERSION=v1
+ENV PIZZA_VERSION=${PIZZA_VERSION}
 COPY --from=build /out/worker /worker
 USER nonroot:nonroot
 ENTRYPOINT ["/worker"]

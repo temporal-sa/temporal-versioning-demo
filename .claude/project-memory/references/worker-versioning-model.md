@@ -1,6 +1,6 @@
 ---
 name: "Worker versioning model"
-description: "Single image + PIZZA_VERSION selects a Pinned shape; workers publish a pizzaVersion metadata label; manual UI-driven routing; backend auto-promotes only the v1-labelled version at bootstrap"
+description: "Three version-tagged worker images (PIZZA_VERSION baked at build); workers publish a pizzaVersion metadata label; manual UI-driven routing; backend auto-promotes only the v1-labelled version at bootstrap"
 type: project
 ---
 
@@ -8,11 +8,16 @@ type: project
 
 How Worker Versioning is wired in this demo:
 
-- **One worker image, three shapes.** A single binary registers v1/v2/v3 of the
-  shared workflow type `PizzaOrder`, all **Pinned**; the `PIZZA_VERSION` env var
-  (set per pod template) selects which shape a pod runs. Shipping a version =
-  bump `PIZZA_VERSION` + image tag; the Worker Controller derives a new Build ID
-  from the pod-template hash.
+- **One binary, three version-tagged images.** A single binary registers
+  v1/v2/v3 of the shared workflow type `PizzaOrder`, all **Pinned**. The active
+  shape is **baked at build time**: `Dockerfile.worker` has `ARG PIZZA_VERSION`
+  → `ENV PIZZA_VERSION`, and CI publishes three images `:v1`/`:v2`/`:v3` (no
+  `:latest`) via `--build-arg`. The worker reads `PIZZA_VERSION` from the env, so
+  a runtime env var still **overrides** the baked default — that override path is
+  used only by local dev (`make dev`) and `compose.yaml`. Shipping a version =
+  deploy a new **image tag**; the K8s manifests no longer set `PIZZA_VERSION`.
+  The Worker Controller derives a new Build ID from the pod-template hash (the
+  tag/digest change flips it).
 - **Versions are labelled from metadata, not registration order.** At startup
   each worker publishes its friendly label (v1/v2/v3) as Worker Deployment
   Version metadata (`pizzaVersion` key). The backend labels versions from that

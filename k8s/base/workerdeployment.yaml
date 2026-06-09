@@ -1,7 +1,8 @@
 # Versioned pizza worker, managed by the Temporal Worker Controller.
 # Manual strategy: new versions stay Inactive until the UI promotes/ramps them.
-# Ship a new version by changing PIZZA_VERSION (and the image tag) in this pod
-# template — the controller derives a new Build ID from the pod-template hash.
+# Ship a new version by changing the image TAG to :v2/:v3 in this pod template
+# (each tag bakes its own PIZZA_VERSION) — the controller derives a new Build ID
+# from the pod-template hash.
 apiVersion: temporal.io/v1alpha1
 kind: WorkerDeployment
 metadata:
@@ -32,12 +33,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: ghcr.io/alexandreroman/temporal-versioning-demo-worker:latest
+          image: ghcr.io/alexandreroman/temporal-versioning-demo-worker:v1
           imagePullPolicy: IfNotPresent
-          env:
-            # The version shape this pod runs. Bump to v2/v3 to ship a new version.
-            - name: PIZZA_VERSION
-              value: v1
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

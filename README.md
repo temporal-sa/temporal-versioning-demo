@@ -44,10 +44,14 @@ guarantee visible on a live dashboard:
 
 ## The three versions
 
-A single worker image compiles all three pizza-workflow
-shapes. The `PIZZA_VERSION` env var selects which shape a pod
-registers (under the shared workflow type `PizzaOrder`); all
-shapes are **Pinned**.
+The worker binary compiles all three pizza-workflow shapes, but
+it is published as **three version-tagged images**
+(`:v1`/`:v2`/`:v3`): the active shape is baked at build time via
+the `PIZZA_VERSION` build arg, so each pod registers exactly one
+shape (under the shared workflow type `PizzaOrder`); all shapes
+are **Pinned**. (Local dev and Compose still pick a shape at
+runtime via a `PIZZA_VERSION` env var, which overrides the baked
+default.)
 
 | Version | Pipeline                                                          | Notes                       |
 | ------- | ----------------------------------------------------------------- | --------------------------- |
@@ -98,11 +102,12 @@ graph TD
   IDs.
 - **Temporal Server + Worker Controller** — the controller
   runs in **Manual** strategy and manages the versioned
-  worker pods. One image compiles all three workflow shapes;
-  the shape is selected per pod by the `PIZZA_VERSION` env
-  var. The controller derives a Build ID from the
-  pod-template hash, so shipping a new version is just a
-  pod-template change (new `PIZZA_VERSION` and/or image tag).
+  worker pods. The worker binary compiles all three workflow
+  shapes, but each image bakes one shape at build time, so the
+  worker is published as three version-tagged images
+  (`:v1`/`:v2`/`:v3`). The controller derives a Build ID from
+  the pod-template hash, so shipping a new version is just a
+  pod-template change — repointing the image tag to `:v2`/`:v3`.
 
 Routing actions map to the Temporal API as follows: ramp →
 `SetRampingVersion`, promote → `SetCurrentVersion`, rollback →
@@ -118,7 +123,8 @@ build.
 | `internal/pizza` | Pizza workflows, activities and shared types.        |
 | `internal/dashboard` | State model, poller, actions, SSE hub, server.   |
 | `frontend`       | Single-page Pizza Tracker dashboard.                 |
-| `k8s`            | Kustomize manifests for the demo deployment.         |
+| `k8s/base`       | Kustomize base manifests for the demo deployment.    |
+| `k8s/v2`, `k8s/v3` | Version overlays that ship the v2/v3 worker.       |
 
 ## Prerequisites
 
@@ -209,20 +215,23 @@ make app-down
 
 Container images are published to ghcr.io by CI:
 
-- `ghcr.io/alexandreroman/temporal-versioning-demo-worker`
-- `ghcr.io/alexandreroman/temporal-versioning-demo-backend`
+- `ghcr.io/alexandreroman/temporal-versioning-demo-worker` —
+  published under the immutable `:v1`/`:v2`/`:v3` tags (one per
+  baked workflow shape; no `:latest`).
+- `ghcr.io/alexandreroman/temporal-versioning-demo-backend` —
+  unversioned, tagged with the commit `sha` plus `:latest`.
 
 ## Deploy to the temporal-k8s cluster
 
-Deploy with `make deploy`, which renders the `k8s/` Kustomize
-set, resolves every image tag to its immutable `sha256` digest
-with kbld, and applies the result:
+Deploy with `make deploy`, which renders the `k8s/base`
+Kustomize set, resolves every image tag to its immutable
+`sha256` digest with kbld, and applies the result:
 
 ```bash
-kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
+kubectl kustomize k8s/base | kbld -f - | kubectl apply -f -
 ```
 
-`make teardown` runs `kubectl delete -k k8s/`. Unlike the
+`make teardown` runs `kubectl delete -k k8s/base`. Unlike the
 local-dev targets, these ignore `.env.local` and run against
 the host environment unchanged.
 
@@ -231,7 +240,7 @@ the host environment unchanged.
 Everything lands in a dedicated `pizza-tracker` namespace (not
 `default`), so add `-n pizza-tracker` to any `kubectl` command
 that inspects the demo (e.g. `kubectl -n pizza-tracker get pods
--w`). The Kustomize set under `k8s/` creates:
+-w`). The Kustomize set under `k8s/base` creates:
 
 | Resource | Name | Role |
 | -------- | ---- | ---- |
@@ -251,12 +260,24 @@ Kind cluster the Traefik `web` listener is mapped to host port
 
 ### Shipping versions and rolling back
 
-Ship a later worker version to the running demo with
-`make deploy-v2` or `make deploy-v3` (and `make deploy-v1` to
-go back). They patch `PIZZA_VERSION` on the live `pizza-worker`
-WorkerDeployment — the image stays the digest pinned by
-`make deploy`, so only the version shape changes. Run
-`make deploy` once first to create the demo.
+`make deploy` installs the v1 base from `k8s/base` (kbld
+digest-pinned). Ship a later worker version to the running demo
+with `make deploy-v2` or `make deploy-v3` (and `make deploy-v1`
+to go back, which simply re-applies the v1 base). The v2/v3
+targets apply a Kustomize overlay under `k8s/` — `k8s/v2` and
+`k8s/v3`, sibling overlays of `k8s/base` (they reference the
+base, not an ancestor, to avoid a kustomize ancestor-cycle) —
+that references the base and repoints the `pizza-worker`
+WorkerDeployment's container image to the immutable per-version
+tag (`:v2`/`:v3`). Each tag bakes its own workflow shape, so the
+pod-template change yields a new Build ID. The overlay output is
+digest-pinned through kbld at apply time, exactly like the base:
+
+```bash
+kubectl kustomize k8s/v2 | kbld -f - | kubectl apply -f -
+```
+
+Run `make deploy` once first to create the demo.
 
 Shipping a version only **registers** it; routing it is a
 separate, manual step from the UI (ramp / promote / rollback —
@@ -367,12 +388,20 @@ its Build ID.)
 `make deploy` therefore pipes the Kustomize output through
 [kbld](https://carvel.dev/kbld/), which rewrites each `image:`
 reference to its `…@sha256:<digest>` form, so a given Build ID
-always maps to exactly one image. Because the digest is
-immutable, the pods keep `imagePullPolicy: IfNotPresent` — a
-cached image is guaranteed to be the right code — and when the
-image content changes, the digest (hence the pod-template hash
-and Build ID) changes with it: precisely the versioning
-behaviour you want.
+always maps to exactly one image. This pins the committed v1
+base. Because the digest is immutable, the pods keep
+`imagePullPolicy: IfNotPresent` — a cached image is guaranteed
+to be the right code — and when the image content changes, the
+digest (hence the pod-template hash and Build ID) changes with
+it: precisely the versioning behaviour you want.
+
+`make deploy-v2` / `make deploy-v3` ship a later version the
+same way: the `k8s/vN` overlay repoints the worker image to
+the immutable per-version tag `:vN`, then the same kbld pass
+pins it to a digest before applying. Each tag is already
+content-addressed (it bakes a distinct `PIZZA_VERSION` and so
+resolves to a distinct digest), so the result keeps the same
+one-Build-ID-per-image guarantee as the base.
 
 ## Demo script
 
@@ -387,8 +416,8 @@ The on-stage flow that exercises every guarantee:
 
 1. **Steady state on v1.** Orders stream in on v1 (4 steps).
    The KPI strip shows Current `v1`.
-2. **Ship v2.** Run `make deploy-v2` (patches `PIZZA_VERSION`
-   on the running worker). Wait for the v2 pod.
+2. **Ship v2.** Run `make deploy-v2` (repoints the worker image
+   to the `:v2` tag). Wait for the v2 pod.
 3. **Ramp v2.** In the UI, ramp 25% → 50% → 100%, then
    **Promote**. In-flight v1 orders keep their 4-step journey
    (pinned); new orders show the 5-step v2 pipeline with the
@@ -417,7 +446,7 @@ The worker reads:
 | `TEMPORAL_NAMESPACE`       | Temporal namespace                      | `default`        |
 | `TEMPORAL_DEPLOYMENT_NAME` | Worker Deployment name (controller)     | (required)       |
 | `TEMPORAL_WORKER_BUILD_ID` | Worker Build ID (controller)            | (required)       |
-| `PIZZA_VERSION`            | Workflow shape this pod runs (v1/v2/v3) | `v1`             |
+| `PIZZA_VERSION`            | Workflow shape to run (v1/v2/v3); baked into each image, overridable at runtime for local dev/Compose | `v1` |
 | `PIZZA_TASK_QUEUE`         | Task queue polled by the worker         | `pizza`          |
 
 The backend reads:
@@ -434,9 +463,11 @@ The backend reads:
 
 > The controller auto-injects `TEMPORAL_ADDRESS`,
 > `TEMPORAL_NAMESPACE`, `TEMPORAL_DEPLOYMENT_NAME` and
-> `TEMPORAL_WORKER_BUILD_ID` into the worker pods, so the
-> `k8s/workerdeployment.yaml` pod template only sets
-> `PIZZA_VERSION`.
+> `TEMPORAL_WORKER_BUILD_ID` into the worker pods. In K8s the
+> pod template no longer sets `PIZZA_VERSION` at all — the image
+> tag carries the version (each `:vN` image bakes its own
+> `PIZZA_VERSION`). The runtime env var is only used by local
+> dev and Compose to override the baked default.
 
 ## License
 

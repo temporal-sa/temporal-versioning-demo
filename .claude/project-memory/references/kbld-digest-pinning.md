@@ -10,8 +10,13 @@ type: project
 kbld (Carvel) rewrites every `image:` tag — including the WorkerDeployment
 CRD's `spec.template.spec.containers[].image` (default kbld search rules match
 the `image` key in any YAML doc) — to its immutable `…@sha256:<digest>` form
-at apply time. Manifests keep human-readable `:latest` tags and pods use
-`imagePullPolicy: IfNotPresent`.
+at apply time. Manifests keep human-readable tags (the worker base is now
+`:v1`, not `:latest`) and pods use `imagePullPolicy: IfNotPresent`.
+
+Note: **all** deploy paths go through kbld now. `make deploy` pins the `:v1`
+base (`k8s/base`); `make deploy-v2`/`deploy-v3` apply kustomize overlays
+(`kubectl kustomize k8s/vN | kbld -f - | kubectl apply -f -`) so v2/v3 are
+digest-pinned too. See [[version-shipping-kubectl-patch]].
 
 **Why:** with Worker Versioning the controller derives the Build ID from the
 pod-template hash. A mutable `:latest` keeps the pod template (hence Build ID)
