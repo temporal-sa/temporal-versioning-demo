@@ -13,7 +13,28 @@ spec:
       name: pizza-temporal
     temporalNamespace: default
   rollout:
+    # Manual: new versions stay Inactive; you drive ramp / promote / rollback
+    # by hand from the dashboard. This is what the demo uses.
     strategy: Manual
+    # Progressive (production-style): let the controller automate the rollout
+    # instead of the UI. Swap `strategy: Manual` above for `strategy:
+    # Progressive` and add a `steps:` schedule — the controller raises the
+    # ramping percentage to each step, waits `pauseDuration`, then advances,
+    # promoting the version to Current after the final step. For example:
+    #
+    #   strategy: Progressive
+    #   steps:                     # up to 20 steps
+    #     - rampPercentage: 25     # 1-99
+    #       pauseDuration: 30s     # minimum 30s
+    #     - rampPercentage: 50
+    #       pauseDuration: 1m
+    #   gate:                      # optional
+    #     # A Temporal workflow the controller runs before advancing a step;
+    #     # the step proceeds only if it completes successfully (use it to
+    #     # smoke-test the new version, check SLOs, etc.).
+    #     workflowType: PizzaRolloutGate
+    #
+    # AllAtOnce is also available (immediate switch to 100%).
   sunset:
     # A drained version's pods stay up this long, so you can still roll
     # back to it (rollback routes to a live worker only while it exists).
