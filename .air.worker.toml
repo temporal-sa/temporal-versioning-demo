@@ -2,8 +2,9 @@ root = "."
 tmp_dir = "tmp/worker"
 
 [build]
-  # Build only the worker; its tmp_dir is separate from the backend's so the two
-  # Air instances (started together by `make dev`) don't clobber each other.
+  # Build only the worker. `make dev` runs three Air instances from this config,
+  # one per version, each overriding -tmp_dir/-build.cmd/-build.bin to its own
+  # tmp/worker-vN dir so the instances don't clobber each other's binary.
   cmd = "go build -o ./tmp/worker/worker ./cmd/worker"
   bin = "./tmp/worker/worker"
   include_ext = ["go"]
