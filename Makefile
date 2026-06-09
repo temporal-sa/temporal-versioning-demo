@@ -3,7 +3,7 @@
 # Local-dev overlay: loaded only for dev/test targets so cluster targets
 # (deploy/teardown) run against the host environment unchanged.
 DEV_TARGETS := dev backend worker worker-v2 worker-v3 \
-               app-up app-worker-v2 app-worker-v3 app-down app-logs \
+               app-up app-v1 app-v2 app-v3 app-down app-logs \
                infra-up infra-down infra-logs \
                test check
 GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
@@ -98,12 +98,16 @@ worker-v3: ## Run the v3 worker on the host (demo: ship v3)
 app-up: ## Bring up the full stack in Docker (Temporal + backend + worker v1)
 	docker compose up -d --build
 
-.PHONY: app-worker-v2
-app-worker-v2: ## Start the v2 worker in the Docker stack (demo: ship v2)
+.PHONY: app-v1
+app-v1: ## Start the v1 worker in the Docker stack (demo: ship/restart v1)
+	docker compose up -d --build worker
+
+.PHONY: app-v2
+app-v2: ## Start the v2 worker in the Docker stack (demo: ship v2)
 	docker compose --profile v2 up -d --build
 
-.PHONY: app-worker-v3
-app-worker-v3: ## Start the v3 worker in the Docker stack (demo: ship v3)
+.PHONY: app-v3
+app-v3: ## Start the v3 worker in the Docker stack (demo: ship v3)
 	docker compose --profile v3 up -d --build
 
 .PHONY: app-down

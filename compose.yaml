@@ -4,10 +4,10 @@
 # versioned pizza worker. No secrets, no external dependencies.
 #
 # `make app-up` starts temporal + backend + worker (v1). The v2 and v3
-# workers sit behind Compose profiles and are started on demand, e.g.:
+# workers sit behind Compose profiles; ship them on demand:
 #
-#     docker compose --profile v2 up -d
-#     docker compose --profile v3 up -d
+#     make app-v2   # ship v2
+#     make app-v3   # ship v3
 #
 # The backend and worker images are distroless/static (no shell, no wget),
 # so only the Temporal service declares a healthcheck.

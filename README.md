@@ -200,11 +200,13 @@ containers:
 make app-up   # builds and starts Temporal + backend + worker v1
 ```
 
-During the demo, ship the next versions via Compose profiles:
+During the demo, ship the next versions — locally each one
+starts a coexisting worker (there is no Worker Controller), so
+you can ramp / promote it from the dashboard:
 
 ```bash
-docker compose --profile v2 up -d   # ship v2
-docker compose --profile v3 up -d   # ship v3
+make app-v2   # ship v2
+make app-v3   # ship v3
 ```
 
 Tear the stack down with:
