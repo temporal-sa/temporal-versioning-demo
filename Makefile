@@ -146,9 +146,29 @@ build: ## Build the worker and backend binaries into ./bin
 
 ##@ Deploy
 
+K8S_NAMESPACE ?= pizza-tracker
+WORKER_DEPLOYMENT ?= pizza-worker
+
 .PHONY: deploy
-deploy: ## Deploy to temporal-k8s (images pinned to digests via kbld)
+deploy: ## Deploy the demo (v1) to temporal-k8s (images pinned to digests via kbld)
 	kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
+
+.PHONY: deploy-v1
+deploy-v1: ## Ship the v1 worker to the running demo (PIZZA_VERSION=v1)
+	@$(MAKE) ship-worker WORKER_VERSION=v1
+
+.PHONY: deploy-v2
+deploy-v2: ## Ship the v2 worker to the running demo (PIZZA_VERSION=v2)
+	@$(MAKE) ship-worker WORKER_VERSION=v2
+
+.PHONY: deploy-v3
+deploy-v3: ## Ship the v3 worker to the running demo (PIZZA_VERSION=v3)
+	@$(MAKE) ship-worker WORKER_VERSION=v3
+
+.PHONY: ship-worker
+ship-worker: ## Set the deployed worker's PIZZA_VERSION (use WORKER_VERSION=vN; run `make deploy` first)
+	kubectl -n $(K8S_NAMESPACE) patch workerdeployment $(WORKER_DEPLOYMENT) --type=json \
+		-p='[{"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"$(WORKER_VERSION)"}]'
 
 .PHONY: teardown
 teardown: ## Remove the demo from the cluster

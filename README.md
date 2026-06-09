@@ -214,8 +214,9 @@ Container images are published to ghcr.io by CI:
 
 ## Deploy to the temporal-k8s cluster
 
-Deploy with `make deploy`, which resolves every image tag to
-its immutable `sha256` digest before applying:
+Deploy with `make deploy`, which renders the `k8s/` Kustomize
+set, resolves every image tag to its immutable `sha256` digest
+with kbld, and applies the result:
 
 ```bash
 kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
@@ -225,11 +226,47 @@ kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -
 local-dev targets, these ignore `.env.local` and run against
 the host environment unchanged.
 
-Everything is created in a dedicated `pizza-tracker`
-namespace (not `default`), so add `-n pizza-tracker` to any
-`kubectl` command that inspects the demo — for example
-`kubectl -n pizza-tracker get pods -w` to watch the worker
-pods roll out.
+### What gets deployed
+
+Everything lands in a dedicated `pizza-tracker` namespace (not
+`default`), so add `-n pizza-tracker` to any `kubectl` command
+that inspects the demo (e.g. `kubectl -n pizza-tracker get pods
+-w`). The Kustomize set under `k8s/` creates:
+
+| Resource | Name | Role |
+| -------- | ---- | ---- |
+| `Namespace` | `pizza-tracker` | Isolates the demo from `default`. |
+| `Connection` | `pizza-temporal` | Points the worker at the in-cluster Temporal frontend (`temporal-frontend.temporal.svc.cluster.local:7233`, plaintext). |
+| `WorkerDeployment` | `pizza-worker` | Versioned worker, managed by the Worker Controller (Manual strategy). Registered in Temporal as `pizza-tracker/pizza-worker` (`<namespace>/<name>`). |
+| `Deployment` + `Service` | `pizza-backend` | Dashboard backend (SSE + hypermedia API), served in-cluster on port 80. |
+| `HTTPRoute` | `pizza-tracker` | Routes `pizza.127-0-0-1.nip.io` through the Traefik Gateway to the backend. |
+
+Both pods run as non-root from distroless images with a
+hardened `securityContext`, and their images are pinned to
+digests (see [Why pin images to
+digests?](#why-pin-images-to-digests)). On the temporal-k8s
+Kind cluster the Traefik `web` listener is mapped to host port
+80, so once deployed the dashboard is at
+<http://pizza.127-0-0-1.nip.io/>.
+
+### Shipping versions and rolling back
+
+Ship a later worker version to the running demo with
+`make deploy-v2` or `make deploy-v3` (and `make deploy-v1` to
+go back). They patch `PIZZA_VERSION` on the live `pizza-worker`
+WorkerDeployment — the image stays the digest pinned by
+`make deploy`, so only the version shape changes. Run
+`make deploy` once first to create the demo.
+
+Shipping a version only **registers** it; routing it is a
+separate, manual step from the UI (ramp / promote / rollback —
+see the [Demo script](#demo-script)). When a version stops
+being Current it starts draining; the Worker Controller keeps
+its pods for `sunset.scaledownDelay` (**30m**) so you can still
+roll back to it onto live workers, then removes the version
+after `deleteDelay` (**2h**).
+
+### Bootstrapping the first version
 
 The Worker Controller runs in **Manual** strategy, so it never
 sets a Current version on its own. The backend bootstraps the
@@ -239,9 +276,7 @@ metadata, and **waits** for that metadata before promoting
 (only when no Current is set yet). Keying off the published
 label means starting v1 / v2 / v3 together never promotes an
 arbitrary build — orders start flowing on v1 as soon as its
-worker registers, with no manual promote. Routing the later
-versions (ramp / promote / rollback of v2 / v3) stays manual,
-driven from the UI.
+worker registers, with no manual promote.
 
 If you ever need to set the Current version by hand (e.g. to
 recover), use the **Promote** button in the UI or the CLI:
@@ -252,9 +287,6 @@ temporal worker deployment describe --deployment-name pizza-tracker/pizza-worker
 temporal worker deployment set-current-version \
   --deployment-name pizza-tracker/pizza-worker --build-id <v1-build-id>
 ```
-
-The dashboard is then available at
-<http://pizza.127-0-0-1.nip.io/>.
 
 ### Why pin images to digests?
 
@@ -293,26 +325,25 @@ The on-stage flow that exercises every guarantee:
 
 1. **Steady state on v1.** Orders stream in on v1 (4 steps).
    The KPI strip shows Current `v1`.
-2. **Ship v2.** Set `PIZZA_VERSION: v2` in
-   `k8s/workerdeployment.yaml` (optionally bump the image
-   tag) and `kubectl apply -k k8s/`. Wait for the v2 pod.
+2. **Ship v2.** Run `make deploy-v2` (patches `PIZZA_VERSION`
+   on the running worker). Wait for the v2 pod.
 3. **Ramp v2.** In the UI, ramp 25% → 50% → 100%, then
    **Promote**. In-flight v1 orders keep their 4-step journey
    (pinned); new orders show the 5-step v2 pipeline with the
    Quality check. v1 drains and is sunset by the controller.
-4. **Ship v3 and ramp to 25%.** Set `PIZZA_VERSION: v3`,
-   apply, wait for the pod, then ramp v3 to 25%. About 25% of
+4. **Ship v3 and ramp to 25%.** Run `make deploy-v3`, wait
+   for the pod, then ramp v3 to 25%. About 25% of
    new orders reach the Drone step, go **red** with a retry
    count, and stall. v2 orders are unaffected.
 5. **Rollback.** Click **Rollback**. The ramp drops to 0 and
    100% of new orders go to v2 again. The already-stuck v3
    orders stay red — rollback caps the blast radius but does
    not heal them.
-6. **Recover stuck orders.** Click **Recover stuck orders**.
-   Each stuck v3 order is reset-with-moved onto v2: it
-   restarts from Received, pinned to the healthy build, and
-   completes cleanly. Once none remain, v3 drains and is
-   sunset.
+6. **Recover stuck orders.** Each stuck (red) v3 order card has
+   its own **Recover** button — click it to reset-with-move that
+   order onto v2: it restarts from Received, pinned to the
+   healthy build, and completes cleanly. Once none remain, v3
+   drains and is sunset.
 
 ## Configuration
 

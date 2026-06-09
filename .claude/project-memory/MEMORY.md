@@ -7,6 +7,7 @@
 > confirmed.
 
 - [Worker versioning model](references/worker-versioning-model.md) — single image + PIZZA_VERSION = a Pinned shape; workers publish a `pizzaVersion` metadata label; manual UI-driven routing; bootstrap promotes only the v1-labelled version; target `temporal-k8s` Kind cluster.
+- [Version shipping via kubectl JSON patch (no overlays)](references/version-shipping-kubectl-patch.md) — `make deploy-vN` patch `PIZZA_VERSION` (env[0]) on the live `pizza-worker` WorkerDeployment; kustomize overlays abandoned (ancestor-cycle); committed base stays v1; image stays the digest from `make deploy`.
 - [kbld digest pinning for deploy determinism](references/kbld-digest-pinning.md) — `make deploy` pipes kustomize through kbld to pin images to `sha256` digests so each Build ID maps to one image; pods keep `IfNotPresent`, never `Always`.
 - [Temporal API constraints](references/temporal-api-constraints.md) — no `.` in deployment name; no `ORDER BY` on dev visibility; visibility omits `VersioningInfo` (use the `TemporalWorkerDeploymentVersion` SA, never key aggregates on a list build ID); ramp/promote need AllowNoPollers + IgnoreMissingTaskQueues.
 - [Demo timing & v3 drone regression](references/demo-timing.md) — StepDwell 15 s, DeliveredDwell 7 s (outlasts UI collapse); order every ~6 s; ramp 25/50/100 % (10 % stop dropped); v3 drone always fails via native unlimited retry (stays red/Running, never Failed).
