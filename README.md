@@ -363,8 +363,8 @@ temporal worker deployment set-ramping-version \
   --build-id <v2-build-id> --percentage 25
 ```
 
-**Promote** to Current for a full cutover (the **Promote**
-button / reaching the 100% stop):
+**Promote** to Current for a full cutover (the UI equivalent:
+push the slider to the 100% stop, then **Apply**):
 
 ```bash
 temporal worker deployment set-current-version \
@@ -416,15 +416,17 @@ The on-stage flow that exercises every guarantee:
 > modal: pick the target version with the radio buttons and move
 > the 3-stop **25 / 50 / 100%** slider; reaching 100%
 > promotes that version to Current. Rollback drops the ramp from
-> the same modal. The KPI band shows the Current version plus
-> the active Ramping target and percentage.
+> the same modal. The **Workflows** panel lists each version with
+> a status chip (`CURRENT` / `RAMPING N%`) and an in-flight order
+> count, so the active Current and Ramping targets stay visible.
 
 1. **Steady state on v1.** Orders stream in on v1 (4 steps).
-   The KPI strip shows Current `v1`.
+   The **Workflows** panel shows `v1` as Current.
 2. **Ship v2.** Run `make deploy-v2` (repoints the worker image
    to the `:v2` tag). Wait for the v2 pod.
-3. **Ramp v2.** In the UI, ramp 25% → 50% → 100%, then
-   **Promote**. In-flight v1 orders keep their 4-step journey
+3. **Ramp v2.** In the UI, ramp 25% → 50% → 100% and click
+   **Apply** (the 100% stop promotes v2 to Current). In-flight
+   v1 orders keep their 4-step journey
    (pinned); new orders show the 5-step v2 pipeline with the
    Quality check. v1 drains and is sunset by the controller.
 4. **Ship v3 and ramp to 25%.** Run `make deploy-v3`, wait
@@ -436,7 +438,7 @@ The on-stage flow that exercises every guarantee:
    orders stay red — rollback caps the blast radius but does
    not heal them.
 6. **Recover stuck orders.** Each stuck (red) v3 order card has
-   its own **Recover** button — click it to reset-with-move that
+   its own **Fix** button — click it to reset-with-move that
    order onto v2: it restarts from Received, pinned to the
    healthy build, and completes cleanly. Once none remain, v3
    drains and is sunset.

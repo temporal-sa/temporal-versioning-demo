@@ -640,8 +640,8 @@
                and morphed in place like #orders, so button nodes, htmx bindings
                and focus are preserved. The server re-renders both buttons every
                frame. Rollback carries the disabled attribute unless a version is
-               currently ramping. (Recover is now a per-card amber icon button
-               shown on a failing order, not a control here.) -->
+               currently ramping. (Recovery is now a per-card amber "Fix" text
+               button shown on a failing order, not a control here.) -->
           <div class="controls" id="controls" sse-swap="controls" hx-swap="morph:innerHTML"></div>
         </aside>
       </div>
@@ -660,7 +660,8 @@
 
     <!-- Action results and errors are swapped here as toast fragments. The
          Deploy/Rollback buttons live in the Deployment column controls row, and
-         each failing order card carries a per-card Recover button; all surface
+         each failing order card carries a per-card "Fix" (recover) button; all
+         surface
          success and error responses here via #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
   </body>
