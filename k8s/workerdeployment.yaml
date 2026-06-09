@@ -15,8 +15,11 @@ spec:
   rollout:
     strategy: Manual
   sunset:
-    scaledownDelay: 1m
-    deleteDelay: 5m
+    # A drained version's pods stay up this long, so you can still roll
+    # back to it (rollback routes to a live worker only while it exists).
+    scaledownDelay: 30m
+    # Keep the drained version registered/visible before final removal.
+    deleteDelay: 2h
   template:
     spec:
       securityContext:
