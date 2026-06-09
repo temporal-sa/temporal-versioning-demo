@@ -436,39 +436,6 @@ The on-stage flow that exercises every guarantee:
    healthy build, and completes cleanly. Once none remain, v3
    drains and is sunset.
 
-## Configuration
-
-The worker reads:
-
-| Variable                   | Description                             | Default          |
-| -------------------------- | --------------------------------------- | ---------------- |
-| `TEMPORAL_ADDRESS`         | Temporal frontend gRPC address          | `localhost:7233` |
-| `TEMPORAL_NAMESPACE`       | Temporal namespace                      | `default`        |
-| `TEMPORAL_DEPLOYMENT_NAME` | Worker Deployment name (controller)     | (required)       |
-| `TEMPORAL_WORKER_BUILD_ID` | Worker Build ID (controller)            | (required)       |
-| `PIZZA_VERSION`            | Workflow shape to run (v1/v2/v3); baked into each image, overridable at runtime for local dev/Compose | `v1` |
-| `PIZZA_TASK_QUEUE`         | Task queue polled by the worker         | `pizza`          |
-
-The backend reads:
-
-| Variable                | Description                          | Default          |
-| ----------------------- | ------------------------------------ | ---------------- |
-| `TEMPORAL_ADDRESS`      | Temporal frontend gRPC address       | `localhost:7233` |
-| `TEMPORAL_NAMESPACE`    | Temporal namespace                   | `default`        |
-| `PIZZA_DEPLOYMENT_NAME` | Worker Deployment name to describe   | `pizza`          |
-| `PIZZA_TASK_QUEUE`      | Task queue orders are started on     | `pizza`          |
-| `PIZZA_POLL_INTERVAL`   | Temporal poll cadence                | `1s`             |
-| `PIZZA_ORDER_INTERVAL`  | New-order cadence                    | `6s`             |
-| `PORT`                  | HTTP listen port                     | `8080`           |
-
-> The controller auto-injects `TEMPORAL_ADDRESS`,
-> `TEMPORAL_NAMESPACE`, `TEMPORAL_DEPLOYMENT_NAME` and
-> `TEMPORAL_WORKER_BUILD_ID` into the worker pods. In K8s the
-> pod template no longer sets `PIZZA_VERSION` at all — the image
-> tag carries the version (each `:vN` image bakes its own
-> `PIZZA_VERSION`). The runtime env var is only used by local
-> dev and Compose to override the baked default.
-
 ## License
 
 This project is licensed under the Apache-2.0 License — see
