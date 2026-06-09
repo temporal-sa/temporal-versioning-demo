@@ -19,14 +19,13 @@ kubelet refuses to start the container:
 username baked into the image is not enough.
 
 **How to apply:** pin the distroless nonroot UID/GID in the
-pod-level securityContext (already done in `k8s/backend.yaml` and
-`k8s/workerdeployment.yaml`):
+pod-level securityContext (already done in `k8s/base/backend.yaml` and
+`k8s/base/workerdeployment.yaml`):
 
     securityContext:
       runAsNonRoot: true
       runAsUser: 65532
       runAsGroup: 65532
 
-65532 is the UID/GID of the distroless `nonroot` user. Verified
-empirically: pods were rejected without it and ran fine once set.
-See [[k8s-namespace]].
+65532 is the UID/GID of the distroless `nonroot` user; without it the kubelet
+rejects the pods (verified empirically). See [[k8s-namespace]].

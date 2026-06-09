@@ -8,8 +8,8 @@ type: project
 
 The demo's K8s resources deploy to a dedicated `pizza-tracker`
 namespace, not `default`. Kustomize is the single source of
-truth: `k8s/kustomization.yaml` sets `namespace: pizza-tracker`,
-and `k8s/namespace.yaml` (first entry in `resources:`) creates
+truth: `k8s/base/kustomization.yaml` sets `namespace: pizza-tracker`,
+and `k8s/base/namespace.yaml` (first entry in `resources:`) creates
 the Namespace before the namespaced objects. No manifest carries
 a hardcoded `metadata.namespace`.
 

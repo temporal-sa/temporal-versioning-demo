@@ -1,25 +1,26 @@
 ---
 name: "Prefer short Makefile target names"
-description: "Use short target names like app-v1/app-v2/app-v3; no verbose or duplicate-alias targets"
+description: "Short target names (app-vN, deploy-vN); make dev is the only host flow and hot-reloads every component"
 type: feedback
 ---
 
 # Prefer short Makefile target names
 
-The user prefers **short, consistent Makefile target names** and dislikes
-redundant aliases.
+Make target names are **short and consistent**, with no redundant aliases.
 
-- The Compose worker targets are `app-up` / `app-v1` / `app-v2` / `app-v3` /
-  `app-down` / `app-logs` (renamed from the earlier verbose
-  `app-worker-v2`/`app-worker-v3`).
-- A parallel `compose-deploy*` alias family (mirroring the k8s `deploy*`
-  targets) was added and then **removed as duplicates** — the short `app-vN`
-  targets are the single Compose deploy interface.
+- The Compose targets are `app-up` / `app-v1` / `app-v2` / `app-v3` /
+  `app-down` / `app-logs`. The k8s deploy targets are `deploy` / `deploy-vN` /
+  `teardown`. These short names are the single interface for each flow.
+- The host-dev interface is **`make dev` only**. It runs the backend and all
+  three workers under Air, so **every component hot-reloads**. Each worker runs
+  from the shared `.air.worker.toml`, overriding `-tmp_dir`/`-build.cmd`/
+  `-build.bin` to its own `tmp/worker-vN` dir so the three Air instances don't
+  clobber each other's binary.
 
-**Why:** explicit user preference ("Je préfère utiliser des targets courtes
-comme app-v1, app-v2" / "supprime les targets compose-deploy-v1 … en doublon").
+**Why:** the user wants terse, single-purpose target names and requires
+hot-reload for every component.
 
-**How to apply:** when adding or renaming Make targets, favour terse names over
-descriptive-but-long ones, and do not add alias targets that merely duplicate an
-existing one. The k8s deploy targets stay `deploy` / `deploy-vN` / `teardown`
-(see [[version-shipping-kubectl-patch]]).
+**How to apply:** favour terse target names over long descriptive ones, and
+never add an alias target that merely duplicates another. Keep all four host
+components (backend + three workers) under Air — never run workers via `go run`.
+See [[version-shipping-kubectl-patch]] and [[memory-writing-style]].

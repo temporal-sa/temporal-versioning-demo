@@ -19,8 +19,8 @@ the workflow history**.
 
 **Why:** the demo is customer-facing; a `workflow.Sleep` shows as a timer and
 reads as a fake step, whereas activity execution time reads as real processing.
-The user corrected an earlier attempt that kept a `workflow.Sleep` for the drone
-retry backoff.
+This holds even for the drone retry backoff — it is activity-side, not a
+`workflow.Sleep`.
 
 **How to apply:** to make a step take time, add a context-aware wait inside its
 activity (not the workflow), kept as an injectable field that is zero in tests.

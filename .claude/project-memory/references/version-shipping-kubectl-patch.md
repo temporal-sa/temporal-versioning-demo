@@ -29,6 +29,6 @@ digest-pinned like the base). The version is baked per image — see
   kubectl apply -f -` — a full, idempotent re-apply of the stack with the worker
   image at `:vN`, kbld-resolved to a digest.
 - `make teardown` is `kubectl delete -k k8s/base`.
-- The old live `kubectl patch` `ship-worker` target and its
-  `K8S_NAMESPACE` / `WORKER_DEPLOYMENT` / `WORKER_IMAGE` Makefile vars are gone;
-  an earlier `deploy/` (overlays outside `k8s/`) layout was also superseded.
+
+There is no live `kubectl patch` shipping path and no `k8s/overlays/` or
+`deploy/` directory: shipping is purely the overlay re-apply above.

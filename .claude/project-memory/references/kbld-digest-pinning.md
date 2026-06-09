@@ -6,7 +6,7 @@ type: project
 
 # kbld digest pinning for deploy determinism
 
-`make deploy` is `kubectl kustomize k8s/ | kbld -f - | kubectl apply -f -`.
+`make deploy` is `kubectl kustomize k8s/base | kbld -f - | kubectl apply -f -`.
 kbld (Carvel) rewrites every `image:` tag — including the WorkerDeployment
 CRD's `spec.template.spec.containers[].image` (default kbld search rules match
 the `image` key in any YAML doc) — to its immutable `…@sha256:<digest>` form

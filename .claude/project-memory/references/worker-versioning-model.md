@@ -15,7 +15,7 @@ How Worker Versioning is wired in this demo:
   `:latest`) via `--build-arg`. The worker reads `PIZZA_VERSION` from the env, so
   a runtime env var still **overrides** the baked default — that override path is
   used only by local dev (`make dev`) and `compose.yaml`. Shipping a version =
-  deploy a new **image tag**; the K8s manifests no longer set `PIZZA_VERSION`.
+  deploy a new **image tag**; the K8s manifests don't set `PIZZA_VERSION`.
   The Worker Controller derives a new Build ID from the pod-template hash (the
   tag/digest change flips it).
 - **Versions are labelled from metadata, not registration order.** At startup
