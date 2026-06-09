@@ -153,7 +153,7 @@ func NewRenderer() (*Renderer, error) {
 	return &Renderer{tmpl: tmpl}, nil
 }
 
-// Region renders a single named region (orders, versions) to w using the given
+// Region renders a single named region (see sseRegions) to w using the given
 // state.
 func (r *Renderer) Region(w io.Writer, name string, state DashboardState) error {
 	if err := r.tmpl.ExecuteTemplate(w, name, state); err != nil {

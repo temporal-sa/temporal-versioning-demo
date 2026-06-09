@@ -32,7 +32,7 @@ type Actions struct {
 	deploymentName string
 	namespace      string
 	logger         *slog.Logger
-	labels         *labelResolver
+	labels         *LabelResolver
 }
 
 // handle returns a handle to this Actions' worker deployment.
@@ -54,14 +54,15 @@ func (a *Actions) setCurrent(ctx context.Context, buildID string) error {
 	return nil
 }
 
-// NewActions builds an Actions over the given client and deployment.
-func NewActions(c client.Client, deploymentName, namespace string, logger *slog.Logger) *Actions {
+// NewActions builds an Actions over the given client and deployment. The label
+// resolver is shared with the reader so the buildID→label cache is not duplicated.
+func NewActions(c client.Client, deploymentName, namespace string, labels *LabelResolver, logger *slog.Logger) *Actions {
 	return &Actions{
 		c:              c,
 		deploymentName: deploymentName,
 		namespace:      namespace,
 		logger:         logger,
-		labels:         newLabelResolver(c, deploymentName, logger),
+		labels:         labels,
 	}
 }
 
@@ -135,10 +136,7 @@ func (a *Actions) metadataLabels(ctx context.Context) (map[string]string, string
 	if err != nil {
 		return nil, "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
-	var current string
-	if rc := resp.Info.RoutingConfig; rc.CurrentVersion != nil {
-		current = rc.CurrentVersion.BuildID
-	}
+	current := currentBuildID(resp.Info.RoutingConfig)
 	return a.metadataLabelMap(ctx, resp.Info.VersionSummaries), current, nil
 }
 
@@ -300,10 +298,7 @@ func (a *Actions) currentBuild(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
 	}
-	if cv := resp.Info.RoutingConfig.CurrentVersion; cv != nil {
-		return cv.BuildID, nil
-	}
-	return "", nil
+	return currentBuildID(resp.Info.RoutingConfig), nil
 }
 
 // resetWithMove resets the listed run to its first completed Workflow Task and

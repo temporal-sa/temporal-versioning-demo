@@ -42,9 +42,20 @@ func fetchVersionLabel(ctx context.Context, c client.Client, deploymentName, bui
 	return decodeVersionLabel(desc.Info.Metadata), nil
 }
 
-// labelResolver caches each build's friendly pizzaVersion label, fetching it from
-// version metadata on first use. Safe for concurrent use.
-type labelResolver struct {
+// currentBuildID returns the Current version's Build ID from a routing config, or
+// "" when no Current version is set. It centralizes the CurrentVersion nil-guard
+// shared by the reader and the actions.
+func currentBuildID(rc client.WorkerDeploymentRoutingConfig) string {
+	if rc.CurrentVersion != nil {
+		return rc.CurrentVersion.BuildID
+	}
+	return ""
+}
+
+// LabelResolver caches each build's friendly pizzaVersion label, fetching it from
+// version metadata on first use. Safe for concurrent use. It is shared between the
+// reader and the actions so the buildID→label cache lives in one place.
+type LabelResolver struct {
 	c              client.Client
 	deploymentName string
 	logger         *slog.Logger
@@ -52,14 +63,15 @@ type labelResolver struct {
 	cache          map[string]string // buildID -> label; only non-empty labels are cached
 }
 
-func newLabelResolver(c client.Client, deploymentName string, logger *slog.Logger) *labelResolver {
-	return &labelResolver{c: c, deploymentName: deploymentName, logger: logger, cache: map[string]string{}}
+// NewLabelResolver builds a LabelResolver over the given client and deployment.
+func NewLabelResolver(c client.Client, deploymentName string, logger *slog.Logger) *LabelResolver {
+	return &LabelResolver{c: c, deploymentName: deploymentName, logger: logger, cache: map[string]string{}}
 }
 
 // label returns the build's friendly metadata label, or "" when none is published
 // yet. Resolved labels are cached; "" is not, so a build is re-fetched until its
 // worker publishes the metadata. The caller decides any CreateTime fallback.
-func (r *labelResolver) label(ctx context.Context, buildID string) string {
+func (r *LabelResolver) label(ctx context.Context, buildID string) string {
 	r.mu.Lock()
 	if v, ok := r.cache[buildID]; ok {
 		r.mu.Unlock()

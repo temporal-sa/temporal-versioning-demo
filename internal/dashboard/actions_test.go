@@ -86,7 +86,7 @@ func TestBootstrapBuildIDPicksV1(t *testing.T) {
 // so `go test -race` flags any regression that drops the mutex guard. Keys are
 // pre-seeded so label() returns from the cache and never dials the nil client.
 func TestLabelResolverConcurrent(t *testing.T) {
-	r := newLabelResolver(nil, "pizza", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := NewLabelResolver(nil, "pizza", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	for i := 0; i < 5; i++ {
 		r.cache[fmt.Sprintf("b%d", i)] = "v1"
 	}

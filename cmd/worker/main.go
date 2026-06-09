@@ -34,48 +34,39 @@ func main() {
 // run wires and runs the versioned worker until the process is signalled. It owns
 // all deferred cleanup so main can exit non-zero without skipping it.
 func run(logger *slog.Logger) error {
-	cfg := struct {
-		temporalAddress string
-		namespace       string
-		deploymentName  string
-		buildID         string
-		taskQueue       string
-		version         string
-	}{
-		temporalAddress: getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
-		namespace:       getenv("TEMPORAL_NAMESPACE", "default"),
-		deploymentName:  os.Getenv("TEMPORAL_DEPLOYMENT_NAME"),
-		buildID:         os.Getenv("TEMPORAL_WORKER_BUILD_ID"),
-		taskQueue:       getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue),
-		version:         getenv("PIZZA_VERSION", string(pizza.V1)),
-	}
+	temporalAddress := getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233")
+	namespace := getenv("TEMPORAL_NAMESPACE", "default")
+	deploymentName := os.Getenv("TEMPORAL_DEPLOYMENT_NAME")
+	buildID := os.Getenv("TEMPORAL_WORKER_BUILD_ID")
+	taskQueue := getenv("PIZZA_TASK_QUEUE", pizza.TaskQueue)
+	version := getenv("PIZZA_VERSION", string(pizza.V1))
 
-	v, ok := pizza.ParseVersion(cfg.version)
+	v, ok := pizza.ParseVersion(version)
 	if !ok {
-		return fmt.Errorf("invalid PIZZA_VERSION %q", cfg.version)
+		return fmt.Errorf("invalid PIZZA_VERSION %q", version)
 	}
-	if cfg.deploymentName == "" || cfg.buildID == "" {
+	if deploymentName == "" || buildID == "" {
 		return fmt.Errorf("missing controller-injected env vars: TEMPORAL_DEPLOYMENT_NAME=%q TEMPORAL_WORKER_BUILD_ID=%q",
-			cfg.deploymentName, cfg.buildID)
+			deploymentName, buildID)
 	}
 
 	logger.Info("starting pizza worker",
-		"temporalAddress", cfg.temporalAddress, "namespace", cfg.namespace,
-		"deploymentName", cfg.deploymentName, "buildID", cfg.buildID,
-		"taskQueue", cfg.taskQueue, "pizzaVersion", cfg.version)
+		"temporalAddress", temporalAddress, "namespace", namespace,
+		"deploymentName", deploymentName, "buildID", buildID,
+		"taskQueue", taskQueue, "pizzaVersion", version)
 
-	c, err := client.Dial(client.Options{HostPort: cfg.temporalAddress, Namespace: cfg.namespace})
+	c, err := client.Dial(client.Options{HostPort: temporalAddress, Namespace: namespace})
 	if err != nil {
 		return fmt.Errorf("connect to Temporal: %w", err)
 	}
 	defer c.Close()
 
-	w := worker.New(c, cfg.taskQueue, worker.Options{
+	w := worker.New(c, taskQueue, worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			UseVersioning: true,
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: cfg.deploymentName,
-				BuildID:        cfg.buildID,
+				DeploymentName: deploymentName,
+				BuildID:        buildID,
 			},
 			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
@@ -95,7 +86,7 @@ func run(logger *slog.Logger) error {
 	// is racy when all versions start together). Best-effort: a freshly started
 	// version may not be registered until its first poll, so retry briefly; never
 	// fail the worker if this does not land.
-	go publishVersionLabel(ctx, c, cfg.deploymentName, cfg.buildID, cfg.version, logger)
+	go publishVersionLabel(ctx, c, deploymentName, buildID, version, logger)
 
 	<-ctx.Done()
 	logger.Info("pizza worker stopped")

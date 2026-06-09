@@ -49,9 +49,12 @@ func main() {
 	defer c.Close()
 
 	hub := dashboard.NewHub()
-	reader := dashboard.NewSDKReader(c, deploymentName, logger)
+	// One shared label resolver so the buildID→label cache is not duplicated
+	// between the reader and the actions.
+	labels := dashboard.NewLabelResolver(c, deploymentName, logger)
+	reader := dashboard.NewSDKReader(c, deploymentName, labels, logger)
 	poller := dashboard.NewPoller(reader, pollInterval, logger, hub.Publish)
-	actions := dashboard.NewActions(c, deploymentName, namespace, logger)
+	actions := dashboard.NewActions(c, deploymentName, namespace, labels, logger)
 	// Seed startID from the wall clock so order IDs do not reset to order-1 on
 	// every restart and collide with a still-open order from the previous run.
 	// This is backend/client code (not workflow code), so using the clock is fine.

@@ -30,16 +30,18 @@ type SDKReader struct {
 	deploymentName string
 	logger         *slog.Logger
 
-	labels *labelResolver
+	labels *LabelResolver
 }
 
-// NewSDKReader builds an SDK-backed TemporalReader for the given deployment.
-func NewSDKReader(c client.Client, deploymentName string, logger *slog.Logger) *SDKReader {
+// NewSDKReader builds an SDK-backed TemporalReader for the given deployment. The
+// label resolver is shared with the actions so the buildID→label cache is not
+// duplicated.
+func NewSDKReader(c client.Client, deploymentName string, labels *LabelResolver, logger *slog.Logger) *SDKReader {
 	return &SDKReader{
 		c:              c,
 		deploymentName: deploymentName,
 		logger:         logger,
-		labels:         newLabelResolver(c, deploymentName, logger),
+		labels:         labels,
 	}
 }
 
@@ -53,10 +55,8 @@ func (r *SDKReader) DeploymentSnapshot(ctx context.Context) (Routing, []VersionS
 
 	rc := resp.Info.RoutingConfig
 	routing := Routing{
-		RampingPct: int(rc.RampingVersionPercentage),
-	}
-	if rc.CurrentVersion != nil {
-		routing.CurrentBuildID = rc.CurrentVersion.BuildID
+		RampingPct:     int(rc.RampingVersionPercentage),
+		CurrentBuildID: currentBuildID(rc),
 	}
 	if rc.RampingVersion != nil {
 		routing.RampingBuildID = rc.RampingVersion.BuildID

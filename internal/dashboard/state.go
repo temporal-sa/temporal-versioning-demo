@@ -36,7 +36,6 @@ type Order struct {
 // VersionCard is one deployment-panel card.
 type VersionCard struct {
 	Version     string // friendly: v1/v2/v3
-	BuildID     string
 	Status      VersionStatus
 	TrafficPct  int
 	PinnedCount int
@@ -118,7 +117,6 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 	for _, s := range sorted {
 		card := VersionCard{
 			Version:     label[s.BuildID],
-			BuildID:     s.BuildID,
 			PinnedCount: pinned[label[s.BuildID]],
 			Status:      StatusInactive,
 		}
@@ -135,10 +133,8 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 		cards = append(cards, card)
 	}
 
-	// Display cards in friendly-label order (v1, v2, v3). Compare the integer
-	// after the leading "v" so the ordering is numeric rather than fragile
-	// lexicographic; fall back to a plain string compare when either label does
-	// not parse. A stable sort keeps the CreateTime order for ties.
+	// Display cards in friendly-label order (v1, v2, v3); a stable sort keeps the
+	// CreateTime order for ties. See compareVersion for the ordering rationale.
 	slices.SortStableFunc(cards, func(a, b VersionCard) int {
 		return compareVersion(a.Version, b.Version)
 	})

@@ -113,8 +113,8 @@ func TestBuildStateLabelsByMetadataWhenPresent(t *testing.T) {
 		byVer[c.Version] = c
 	}
 	// b_old is the CurrentBuildID and is labelled v1 via metadata.
-	if byVer["v1"].BuildID != "b_old" || byVer["v1"].Status != dashboard.StatusCurrent {
-		t.Errorf("v1 card = %+v, want build b_old with status CURRENT", byVer["v1"])
+	if byVer["v1"].Status != dashboard.StatusCurrent {
+		t.Errorf("v1 card = %+v, want status CURRENT (b_old labelled v1 via metadata)", byVer["v1"])
 	}
 	if _, ok := byVer["v3"]; !ok {
 		t.Errorf("expected a v3 card from metadata, got %+v", st.Versions)
