@@ -194,7 +194,7 @@ func (r *Renderer) DeployRamp(w io.Writer, view rampView) error {
 	return nil
 }
 
-// funcMap ports the app.js rendering helpers into template functions.
+// funcMap registers the template rendering helpers.
 func funcMap() template.FuncMap {
 	return template.FuncMap{
 		"versionClass":        versionClass,
@@ -226,7 +226,7 @@ func hasMultipleVersions(versions []VersionCard) bool {
 }
 
 // versionClass maps a friendly version to its badge color class (b-v1/b-v2/b-v3),
-// defaulting to b-v1 like app.js.
+// defaulting to b-v1.
 func versionClass(version string) string {
 	switch version {
 	case "v2":
@@ -238,7 +238,7 @@ func versionClass(version string) string {
 	}
 }
 
-// formatElapsed renders seconds as m:ss, matching app.js formatElapsed.
+// formatElapsed renders seconds as m:ss.
 func formatElapsed(seconds int) string {
 	if seconds < 0 {
 		seconds = 0

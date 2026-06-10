@@ -1,5 +1,5 @@
 {{/* Pizza Tracker dashboard regions, rendered server-side and streamed over SSE.
-     html/template auto-escaping replaces the JS escapeHtml helper. */}}
+     html/template auto-escapes interpolated values. */}}
 
 {{- define "badge" -}}
 <span class="vb {{versionClass .}}">{{.}}</span>
