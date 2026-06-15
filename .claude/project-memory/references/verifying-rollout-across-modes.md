@@ -52,3 +52,18 @@ resolve labels through the metadata. Cluster CLI address is
 <http://pizza.127-0-0-1.nip.io/>. A stuck v3 order's recovery is
 confirmed when its workflow is RUNNING and pinned to the v2 build with no
 `DroneDelivery` activity in its fresh history.
+
+## Ground-truth via the WorkerDeployment CR (cluster only)
+
+On the kind cluster, the Worker Controller mirrors the routing config
+onto the `WorkerDeployment` CR status, so you can read it with kubectl
+instead of the Temporal CLI:
+
+```
+kubectl get workerdeployment pizza-worker -n pizza-tracker -o jsonpath='{.status.currentVersion.buildID} {.status.targetVersion.status} {.status.targetVersion.rampPercentage}'
+```
+
+`.status.targetVersion.status` is `Ramping` while a ramp is in flight
+(with `rampPercentage` 25/50), and flips to `Current` after a promote
+(ramp cleared); after a rollback the old target shows `Draining`. The CR
+carries Build IDs, not the friendly v1/v2/v3 labels.
