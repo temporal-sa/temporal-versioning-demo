@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,13 +10,10 @@ import (
 )
 
 func TestDecideBootstrap(t *testing.T) {
-	describeErr := errors.New("describe worker deployment: connection refused")
-
 	tests := []struct {
 		name         string
 		target       string
 		current      string
-		err          error
 		wantDecision bootstrapDecision
 		wantBuildID  string
 	}{
@@ -25,43 +21,26 @@ func TestDecideBootstrap(t *testing.T) {
 			name:         "current already set skips even with a target",
 			target:       "b2",
 			current:      "b1",
-			err:          nil,
 			wantDecision: bootstrapSkip,
 		},
 		{
-			name:         "no target no current no error waits",
+			name:         "no target no current waits",
 			target:       "",
 			current:      "",
-			err:          nil,
-			wantDecision: bootstrapWait,
-		},
-		{
-			name:         "describe error waits",
-			target:       "",
-			current:      "",
-			err:          describeErr,
 			wantDecision: bootstrapWait,
 		},
 		{
 			name:         "target with empty current promotes that build",
 			target:       "b1",
 			current:      "",
-			err:          nil,
 			wantDecision: bootstrapPromote,
 			wantBuildID:  "b1",
-		},
-		{
-			name:         "target present but describe errored waits",
-			target:       "b1",
-			current:      "",
-			err:          describeErr,
-			wantDecision: bootstrapWait,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDecision, gotBuildID := decideBootstrap(tt.target, tt.current, tt.err)
+			gotDecision, gotBuildID := decideBootstrap(tt.target, tt.current)
 			if gotDecision != tt.wantDecision {
 				t.Errorf("decision = %d, want %d", gotDecision, tt.wantDecision)
 			}

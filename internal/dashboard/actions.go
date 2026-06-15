@@ -40,6 +40,15 @@ func (a *Actions) handle() client.WorkerDeploymentHandle {
 	return a.c.WorkerDeploymentClient().GetHandle(a.deploymentName)
 }
 
+// describe wraps the worker-deployment Describe call with a consistent error.
+func (a *Actions) describe(ctx context.Context) (client.WorkerDeploymentDescribeResponse, error) {
+	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	if err != nil {
+		return client.WorkerDeploymentDescribeResponse{}, fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+	}
+	return resp, nil
+}
+
 // setCurrent makes buildID the Current version. The lenient options are required
 // because a freshly-shipped version's pollers may not be registered yet, and its
 // task queues may differ from any prior version.
@@ -103,9 +112,9 @@ func (a *Actions) Promote(ctx context.Context, version string) error {
 // versionIndex resolves the live label↔Build ID mapping (metadata-first, with a
 // CreateTime fallback).
 func (a *Actions) versionIndex(ctx context.Context) (map[string]string, error) {
-	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	resp, err := a.describe(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+		return nil, err
 	}
 
 	buildToLabel := a.metadataLabelMap(ctx, resp.Info.VersionSummaries)
@@ -132,9 +141,9 @@ func (a *Actions) versionIndex(ctx context.Context) (map[string]string, error) {
 // for a worker to actually publish pizzaVersion=v1 instead of promoting an
 // arbitrary (oldest-registered) build when all versions start together.
 func (a *Actions) metadataLabels(ctx context.Context) (map[string]string, string, error) {
-	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	resp, err := a.describe(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+		return nil, "", err
 	}
 	current := currentBuildID(resp.Info.RoutingConfig)
 	return a.metadataLabelMap(ctx, resp.Info.VersionSummaries), current, nil
@@ -189,12 +198,13 @@ const (
 //   - a Current version already exists -> skip (keeps the manual ramp/promote/
 //     rollback flow untouched, even if a newer target also exists);
 //   - no Current and a target is ready -> promote that target;
-//   - otherwise (describe error, empty target) -> wait.
-func decideBootstrap(target, current string, err error) (bootstrapDecision, string) {
+//   - otherwise (empty target) -> wait. A describe failure routes here too,
+//     because the caller reports an empty target on failure.
+func decideBootstrap(target, current string) (bootstrapDecision, string) {
 	if current != "" {
 		return bootstrapSkip, ""
 	}
-	if err == nil && target != "" {
+	if target != "" {
 		return bootstrapPromote, target
 	}
 	return bootstrapWait, ""
@@ -220,7 +230,7 @@ func (a *Actions) EnsureCurrentVersion(ctx context.Context, pollInterval time.Du
 	for {
 		buildToLabel, current, err := a.metadataLabels(ctx)
 		target := bootstrapBuildID(buildToLabel)
-		switch decision, buildID := decideBootstrap(target, current, err); decision {
+		switch decision, buildID := decideBootstrap(target, current); decision {
 		case bootstrapSkip:
 			a.logger.Info("current version already set, skipping bootstrap", "currentBuild", current)
 			return
@@ -294,9 +304,9 @@ func (a *Actions) RecoverOne(ctx context.Context, workflowID string) error {
 // currentBuild returns the deployment's Current build ID from the live routing
 // config, or "" if no Current version is set.
 func (a *Actions) currentBuild(ctx context.Context) (string, error) {
-	resp, err := a.handle().Describe(ctx, client.WorkerDeploymentDescribeOptions{})
+	resp, err := a.describe(ctx)
 	if err != nil {
-		return "", fmt.Errorf("describe worker deployment %q: %w", a.deploymentName, err)
+		return "", err
 	}
 	return currentBuildID(resp.Info.RoutingConfig), nil
 }

@@ -70,8 +70,8 @@ func (r *SDKReader) DeploymentSnapshot(ctx context.Context) (Routing, []VersionS
 			BuildID:      buildID,
 			PizzaVersion: labelVal,
 			CreateTime:   s.CreateTime,
-			Draining:     s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDraining,
-			Drained:      s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDrained,
+			Draining: s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDraining ||
+				s.DrainageStatus == client.WorkerDeploymentVersionDrainageStatusDrained,
 		})
 	}
 	return routing, summaries, nil

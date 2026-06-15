@@ -52,8 +52,7 @@ type VersionSummary struct {
 	BuildID      string
 	PizzaVersion string // friendly label from version metadata; "" => fall back to CreateTime
 	CreateTime   time.Time
-	Draining     bool
-	Drained      bool
+	Draining     bool // true while the version is draining or drained (both map to DRAINING)
 }
 
 // Routing mirrors the routing config BuildState needs.
@@ -127,7 +126,7 @@ func BuildState(routing Routing, summaries []VersionSummary, orders []LiveOrder)
 		case s.BuildID == routing.RampingBuildID:
 			card.Status = StatusRamping
 			card.TrafficPct = routing.RampingPct
-		case s.Draining || s.Drained:
+		case s.Draining:
 			card.Status = StatusDraining
 		}
 		cards = append(cards, card)
