@@ -529,6 +529,14 @@
         @apply bg-uv-deep;
       }
 
+      .btn.play {
+        @apply border-green bg-green text-white;
+      }
+
+      .btn.play:hover:not(:disabled) {
+        @apply bg-[#15803d];
+      }
+
       /* ===== Toast ===== */
       .toast {
         @apply pointer-events-none fixed bottom-[18px] left-1/2 z-10 -translate-x-1/2 rounded-[9px]
@@ -638,11 +646,11 @@
 
           <!-- Controls row, streamed server-side via SSE (sse-swap="controls")
                and morphed in place like #orders, so button nodes, htmx bindings
-               and focus are preserved. The server re-renders both buttons every
-               frame. Deploy is disabled with fewer than two versions; Rollback
-               is disabled unless a version is currently ramping. (Recovery is
-               now a per-card amber "Fix" text button shown on a failing order,
-               not a control here.) -->
+               and focus are preserved. The server re-renders the generator,
+               Deploy, and Rollback controls every frame. Deploy is disabled with
+               fewer than two versions; Rollback is disabled unless a version is
+               currently ramping. (Recovery is now a per-card amber "Fix" text
+               button shown on a failing order, not a control here.) -->
           <div class="controls" id="controls" sse-swap="controls" hx-swap="morph:innerHTML"></div>
         </aside>
       </div>
@@ -660,9 +668,10 @@
     <div id="modal-host"></div>
 
     <!-- Action results and errors are swapped here as toast fragments. The
-         Deploy/Rollback buttons live in the Deployment column controls row, and
-         each failing order card carries a per-card "Fix" (recover) button; all
-         surface success and error responses here via #toast. -->
+         generator, Deploy, and Rollback buttons live in the Deployment column
+         controls row, and each failing order card carries a per-card "Fix"
+         (recover) button; all surface success and error responses here via
+         #toast. -->
     <div id="toast" hx-target="#toast" hx-target-error="#toast"></div>
   </body>
 </html>

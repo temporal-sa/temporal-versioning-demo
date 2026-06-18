@@ -20,9 +20,10 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 	return &Server{
-		hub:      NewHub(),
-		renderer: renderer,
-		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		hub:       NewHub(),
+		renderer:  renderer,
+		generator: NewGeneratorControl(),
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 }
 
@@ -93,18 +94,20 @@ func TestRendererControls(t *testing.T) {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	// Deploy and Rollback always render; each carries a disabled attribute
-	// immediately before its label, so assert on the precise `disabled>Deploy`
-	// and `disabled>Rollback` markup. Recover is no longer a control here — it is
-	// now a per-card action.
+	// Play/Pause, Deploy and Rollback always render. Deploy and Rollback each
+	// carry a disabled attribute immediately before its label, so assert on the
+	// precise `disabled>Deploy` and `disabled>Rollback` markup. Recover is no
+	// longer a control here — it is now a per-card action.
 	always := []string{
-		`hx-get="/deploy"`,   // Deploy opens the modal host
-		`hx-get="/rollback"`, // Rollback opens the modal host
+		`hx-get="/deploy"`,       // Deploy opens the modal host
+		`hx-get="/rollback"`,     // Rollback opens the modal host
+		`hx-post="/orders/play"`, // Paused by default, so the generator control is Play
 	}
 
 	tests := []struct {
 		name             string
 		state            DashboardState
+		generatorRunning bool
 		deployDisabled   bool
 		rollbackDisabled bool
 	}{
@@ -126,15 +129,33 @@ func TestRendererControls(t *testing.T) {
 			deployDisabled:   true,
 			rollbackDisabled: true,
 		},
+		{
+			name:             "running generator shows pause",
+			state:            versionsState("v2", "v1", "v2", "v3"),
+			generatorRunning: true,
+			deployDisabled:   false,
+			rollbackDisabled: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.state.Generator.Running = tt.generatorRunning
 			out := renderRegion(t, r, "controls", tt.state)
-			for _, w := range always {
+			checks := always
+			if tt.generatorRunning {
+				checks = []string{`hx-get="/deploy"`, `hx-get="/rollback"`, `hx-post="/orders/pause"`}
+			}
+			for _, w := range checks {
 				if !strings.Contains(out, w) {
 					t.Errorf("controls output missing %q\n--- output ---\n%s", w, out)
 				}
+			}
+			if tt.generatorRunning && strings.Contains(out, `/orders/play`) {
+				t.Errorf("running generator must not render Play\n--- output ---\n%s", out)
+			}
+			if !tt.generatorRunning && strings.Contains(out, `/orders/pause`) {
+				t.Errorf("paused generator must not render Pause\n--- output ---\n%s", out)
 			}
 			if got := strings.Contains(out, `disabled>Deploy`); got != tt.deployDisabled {
 				t.Errorf("Deploy disabled = %v, want %v\n--- output ---\n%s", got, tt.deployDisabled, out)
@@ -412,6 +433,48 @@ func TestHandleClose(t *testing.T) {
 	}
 	if rec.Body.Len() != 0 {
 		t.Errorf("body should be empty so #modal-host is cleared, got %q", rec.Body.String())
+	}
+}
+
+func TestHandleOrdersPlayPause(t *testing.T) {
+	s := newTestServer(t)
+
+	playRec := httptest.NewRecorder()
+	s.handleOrdersPlay(playRec, httptest.NewRequest(http.MethodPost, "/orders/play", nil))
+
+	if playRec.Code != http.StatusOK {
+		t.Errorf("play status = %d, want %d", playRec.Code, http.StatusOK)
+	}
+	if !s.generator.Status().Running {
+		t.Fatal("generator should be running after play")
+	}
+	playOut := playRec.Body.String()
+	for _, want := range []string{`hx-post="/orders/pause"`, `Pause`} {
+		if !strings.Contains(playOut, want) {
+			t.Errorf("play response missing %q\n--- body ---\n%s", want, playOut)
+		}
+	}
+	if strings.Contains(playOut, `/orders/play`) {
+		t.Errorf("play response must render Pause, not Play\n--- body ---\n%s", playOut)
+	}
+
+	pauseRec := httptest.NewRecorder()
+	s.handleOrdersPause(pauseRec, httptest.NewRequest(http.MethodPost, "/orders/pause", nil))
+
+	if pauseRec.Code != http.StatusOK {
+		t.Errorf("pause status = %d, want %d", pauseRec.Code, http.StatusOK)
+	}
+	if s.generator.Status().Running {
+		t.Fatal("generator should be paused after pause")
+	}
+	pauseOut := pauseRec.Body.String()
+	for _, want := range []string{`hx-post="/orders/play"`, `Play`} {
+		if !strings.Contains(pauseOut, want) {
+			t.Errorf("pause response missing %q\n--- body ---\n%s", want, pauseOut)
+		}
+	}
+	if strings.Contains(pauseOut, `/orders/pause`) {
+		t.Errorf("pause response must render Play, not Pause\n--- body ---\n%s", pauseOut)
 	}
 }
 

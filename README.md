@@ -87,7 +87,8 @@ graph TD
   the page. Rollout actions are driven through **hypermedia
   endpoints** that return server-rendered **HTML fragments**
   (not JSON), so they deliberately live off the `/api/` prefix:
-  `POST /deploy` (ramp or promote), `POST /rollback`, and
+  `POST /deploy` (ramp or promote), `POST /rollback`,
+  `POST /orders/play`, `POST /orders/pause`, and
   `POST /orders/{id}/recover`. Their modal fragments are served
   by `GET /deploy` and `GET /rollback` and dismissed with
   `DELETE /modal`. The SPA (`index.html`) is embedded into the
@@ -96,9 +97,10 @@ graph TD
   (`DescribeWorkerDeployment` for routing config and version
   summaries, plus lists and `getState`-queries the open
   `PizzaOrder` workflows), serves the SPA, drives the routing
-  and recovery actions, and runs an order generator that
-  starts one order every few seconds so there is always live
-  traffic. Each worker reports its friendly version
+  and recovery actions, and runs an operator-controlled order
+  generator. Click **Play** to start one order every few seconds;
+  the generator auto-pauses after 10 minutes, and **Pause** stops
+  new orders immediately. Each worker reports its friendly version
   (`v1`/`v2`/`v3`) and step progress through the **`getState`
   query**, so the UI colours orders without decoding Build
   IDs.
@@ -304,8 +306,8 @@ worker has labelled **v1** in its Worker Deployment Version
 metadata, and **waits** for that metadata before promoting
 (only when no Current is set yet). Keying off the published
 label means starting v1 / v2 / v3 together never promotes an
-arbitrary build — orders start flowing on v1 as soon as its
-worker registers, with no manual promote.
+arbitrary build. Once you click **Play**, new orders route to v1
+as soon as its worker registers, with no manual promote.
 
 ### Driving rollouts from the CLI
 
@@ -420,8 +422,8 @@ The on-stage flow that exercises every guarantee:
 > a status chip (`CURRENT` / `RAMPING N%`) and an in-flight order
 > count, so the active Current and Ramping targets stay visible.
 
-1. **Steady state on v1.** Orders stream in on v1 (4 steps).
-   The **Workflows** panel shows `v1` as Current.
+1. **Steady state on v1.** Click **Play**. Orders stream in on
+   v1 (4 steps). The **Workflows** panel shows `v1` as Current.
 2. **Ship v2.** Run `make deploy-v2` (repoints the worker image
    to the `:v2` tag). Wait for the v2 pod.
 3. **Ramp v2.** In the UI, ramp 25% → 50% → 100% and click

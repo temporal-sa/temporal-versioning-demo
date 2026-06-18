@@ -41,10 +41,16 @@ type VersionCard struct {
 	PinnedCount int
 }
 
+// GeneratorStatus is the order generator state shown in the controls row.
+type GeneratorStatus struct {
+	Running bool
+}
+
 // DashboardState is the full SSE payload.
 type DashboardState struct {
-	Orders   []Order
-	Versions []VersionCard
+	Orders    []Order
+	Versions  []VersionCard
+	Generator GeneratorStatus
 }
 
 // VersionSummary mirrors the fields BuildState needs from a Temporal version summary.

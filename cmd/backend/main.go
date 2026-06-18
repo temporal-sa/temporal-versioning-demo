@@ -53,15 +53,16 @@ func main() {
 	// between the reader and the actions.
 	labels := dashboard.NewLabelResolver(c, deploymentName, logger)
 	reader := dashboard.NewSDKReader(c, deploymentName, labels, logger)
-	poller := dashboard.NewPoller(reader, pollInterval, logger, hub.Publish)
+	generatorControl := dashboard.NewGeneratorControl()
+	poller := dashboard.NewPoller(reader, pollInterval, logger, hub.Publish, generatorControl.Status)
 	actions := dashboard.NewActions(c, deploymentName, namespace, labels, logger)
 	// Seed startID from the wall clock so order IDs do not reset to order-1 on
 	// every restart and collide with a still-open order from the previous run.
 	// This is backend/client code (not workflow code), so using the clock is fine.
-	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, int(time.Now().Unix()), logger)
+	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, int(time.Now().Unix()), generatorControl, logger)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           dashboard.NewServer(hub, actions, renderer, frontend.Assets, logger).Routes(),
+		Handler:           dashboard.NewServer(hub, actions, renderer, frontend.Assets, generatorControl, logger).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

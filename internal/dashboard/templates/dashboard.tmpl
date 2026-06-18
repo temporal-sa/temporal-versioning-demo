@@ -50,7 +50,16 @@
 {{- end -}}
 
 {{- define "controls" -}}
-{{- /* . is a DashboardState. Deploy is disabled with fewer than two versions; Rollback is disabled unless a version is ramping. */ -}}
+{{- /* . is a DashboardState. Play/Pause controls new order starts; Deploy is disabled with fewer than two versions; Rollback is disabled unless a version is ramping. */ -}}
+{{- if .Generator.Running -}}
+<button class="btn" type="button" title="Pause orders" aria-label="Pause orders"
+        hx-post="/orders/pause" hx-target="#controls" hx-swap="innerHTML"
+        hx-target-error="#toast" hx-disabled-elt="this">Pause</button>
+{{- else -}}
+<button class="btn play" type="button" title="Run orders for up to 10 minutes" aria-label="Play orders"
+        hx-post="/orders/play" hx-target="#controls" hx-swap="innerHTML"
+        hx-target-error="#toast" hx-disabled-elt="this">Play</button>
+{{- end -}}
 <button class="btn primary" type="button"
         hx-get="/deploy" hx-target="#modal-host" hx-swap="innerHTML"
         hx-target-error="#toast"{{if not (hasMultipleVersions .Versions)}} disabled{{end}}>Deploy</button>

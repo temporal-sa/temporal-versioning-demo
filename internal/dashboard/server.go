@@ -24,22 +24,31 @@ var sseRegions = []string{"orders", "versions", "controls"}
 
 // Server exposes the dashboard API and serves the SPA.
 type Server struct {
-	hub      *Hub
-	actions  *Actions
-	renderer *Renderer
-	frontend http.Handler
-	logger   *slog.Logger
+	hub       *Hub
+	actions   *Actions
+	renderer  *Renderer
+	frontend  http.Handler
+	generator *GeneratorControl
+	logger    *slog.Logger
 }
 
 // NewServer builds a Server serving the SPA from the given file system (the
 // embedded frontend assets in production).
-func NewServer(hub *Hub, actions *Actions, renderer *Renderer, frontend fs.FS, logger *slog.Logger) *Server {
+func NewServer(
+	hub *Hub,
+	actions *Actions,
+	renderer *Renderer,
+	frontend fs.FS,
+	generator *GeneratorControl,
+	logger *slog.Logger,
+) *Server {
 	return &Server{
-		hub:      hub,
-		actions:  actions,
-		renderer: renderer,
-		frontend: http.FileServerFS(frontend),
-		logger:   logger,
+		hub:       hub,
+		actions:   actions,
+		renderer:  renderer,
+		frontend:  http.FileServerFS(frontend),
+		generator: generator,
+		logger:    logger,
 	}
 }
 
@@ -57,9 +66,27 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /modal", s.handleClose)
 	mux.HandleFunc("POST /deploy", s.handleDeploy)
 	mux.HandleFunc("POST /rollback", s.handleRollback)
+	mux.HandleFunc("POST /orders/play", s.handleOrdersPlay)
+	mux.HandleFunc("POST /orders/pause", s.handleOrdersPause)
 	mux.HandleFunc("POST /orders/{id}/recover", s.handleRecoverOne)
 	mux.Handle("/", s.frontend)
 	return mux
+}
+
+func (s *Server) currentState() DashboardState {
+	state := s.hub.Latest()
+	if s.generator != nil {
+		state.Generator = s.generator.Status()
+	}
+	return state
+}
+
+func (s *Server) renderControls(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.Region(w, "controls", s.currentState()); err != nil {
+		s.logger.Warn("render controls failed", "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Render failed: "+err.Error())
+	}
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
@@ -224,6 +251,24 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleOrdersPlay(w http.ResponseWriter, _ *http.Request) {
+	if s.generator == nil {
+		s.writeError(w, http.StatusInternalServerError, "Order generator is unavailable")
+		return
+	}
+	s.generator.Play()
+	s.renderControls(w)
+}
+
+func (s *Server) handleOrdersPause(w http.ResponseWriter, _ *http.Request) {
+	if s.generator == nil {
+		s.writeError(w, http.StatusInternalServerError, "Order generator is unavailable")
+		return
+	}
+	s.generator.Pause()
+	s.renderControls(w)
 }
 
 func (s *Server) handleRecoverOne(w http.ResponseWriter, r *http.Request) {

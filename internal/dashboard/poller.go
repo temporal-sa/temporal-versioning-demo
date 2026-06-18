@@ -18,17 +18,24 @@ type TemporalReader interface {
 
 // Poller periodically snapshots Temporal and publishes a DashboardState.
 type Poller struct {
-	reader   TemporalReader
-	interval time.Duration
-	logger   *slog.Logger
-	publish  func(DashboardState)
+	reader          TemporalReader
+	interval        time.Duration
+	generatorStatus func() GeneratorStatus
+	logger          *slog.Logger
+	publish         func(DashboardState)
 }
 
 // NewPoller builds a Poller that publishes a fresh DashboardState every interval.
 func NewPoller(r TemporalReader, interval time.Duration, logger *slog.Logger,
-	publish func(DashboardState),
+	publish func(DashboardState), generatorStatus func() GeneratorStatus,
 ) *Poller {
-	return &Poller{reader: r, interval: interval, logger: logger, publish: publish}
+	return &Poller{
+		reader:          r,
+		interval:        interval,
+		generatorStatus: generatorStatus,
+		logger:          logger,
+		publish:         publish,
+	}
 }
 
 // Run polls until ctx is cancelled. On each tick it builds and publishes state;
@@ -57,5 +64,9 @@ func (p *Poller) tick(ctx context.Context) {
 		p.logger.Warn("open orders fetch failed", "err", err)
 		return
 	}
-	p.publish(BuildState(routing, summaries, orders))
+	state := BuildState(routing, summaries, orders)
+	if p.generatorStatus != nil {
+		state.Generator = p.generatorStatus()
+	}
+	p.publish(state)
 }
