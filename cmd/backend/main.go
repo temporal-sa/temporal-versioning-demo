@@ -48,14 +48,6 @@ func main() {
 	}
 	defer c.Close()
 
-	ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 15*time.Second)
-	if err := dashboard.EnsureSessionSearchAttribute(ensureCtx, c, namespace, logger); err != nil {
-		ensureCancel()
-		logger.Error("failed to ensure session search attribute", "err", err)
-		os.Exit(1)
-	}
-	ensureCancel()
-
 	// One shared label resolver so the buildID→label cache is not duplicated
 	// between the reader and the actions.
 	labels := dashboard.NewLabelResolver(c, deploymentName, logger)
