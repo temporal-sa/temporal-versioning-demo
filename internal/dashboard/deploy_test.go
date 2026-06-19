@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) *Server {
 	return &Server{
 		hub:       NewHub(),
 		renderer:  renderer,
-		generator: NewGeneratorControl(),
+		generator: NewSessionGeneratorManager(),
 		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 }
@@ -440,12 +440,18 @@ func TestHandleOrdersPlayPause(t *testing.T) {
 	s := newTestServer(t)
 
 	playRec := httptest.NewRecorder()
-	s.handleOrdersPlay(playRec, httptest.NewRequest(http.MethodPost, "/orders/play", nil))
+	playReq := httptest.NewRequest(http.MethodPost, "/orders/play", nil)
+	s.handleOrdersPlay(playRec, playReq)
 
 	if playRec.Code != http.StatusOK {
 		t.Errorf("play status = %d, want %d", playRec.Code, http.StatusOK)
 	}
-	if !s.generator.Status().Running {
+	cookies := playRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("play response should set the session cookie")
+	}
+	sessionID := cookies[0].Value
+	if !s.generator.Status(sessionID).Running {
 		t.Fatal("generator should be running after play")
 	}
 	playOut := playRec.Body.String()
@@ -459,12 +465,14 @@ func TestHandleOrdersPlayPause(t *testing.T) {
 	}
 
 	pauseRec := httptest.NewRecorder()
-	s.handleOrdersPause(pauseRec, httptest.NewRequest(http.MethodPost, "/orders/pause", nil))
+	pauseReq := httptest.NewRequest(http.MethodPost, "/orders/pause", nil)
+	pauseReq.AddCookie(cookies[0])
+	s.handleOrdersPause(pauseRec, pauseReq)
 
 	if pauseRec.Code != http.StatusOK {
 		t.Errorf("pause status = %d, want %d", pauseRec.Code, http.StatusOK)
 	}
-	if s.generator.Status().Running {
+	if s.generator.Status(sessionID).Running {
 		t.Fatal("generator should be paused after pause")
 	}
 	pauseOut := pauseRec.Body.String()

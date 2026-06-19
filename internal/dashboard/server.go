@@ -26,9 +26,11 @@ var sseRegions = []string{"orders", "versions", "controls"}
 type Server struct {
 	hub       *Hub
 	actions   *Actions
+	reader    TemporalReader
 	renderer  *Renderer
 	frontend  http.Handler
-	generator *GeneratorControl
+	generator *SessionGeneratorManager
+	interval  time.Duration
 	logger    *slog.Logger
 }
 
@@ -37,17 +39,21 @@ type Server struct {
 func NewServer(
 	hub *Hub,
 	actions *Actions,
+	reader TemporalReader,
 	renderer *Renderer,
 	frontend fs.FS,
-	generator *GeneratorControl,
+	generator *SessionGeneratorManager,
+	interval time.Duration,
 	logger *slog.Logger,
 ) *Server {
 	return &Server{
 		hub:       hub,
 		actions:   actions,
+		reader:    reader,
 		renderer:  renderer,
 		frontend:  http.FileServerFS(frontend),
 		generator: generator,
+		interval:  interval,
 		logger:    logger,
 	}
 }
@@ -69,24 +75,51 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /orders/play", s.handleOrdersPlay)
 	mux.HandleFunc("POST /orders/pause", s.handleOrdersPause)
 	mux.HandleFunc("POST /orders/{id}/recover", s.handleRecoverOne)
-	mux.Handle("/", s.frontend)
+	mux.HandleFunc("/", s.handleFrontend)
 	return mux
 }
 
-func (s *Server) currentState() DashboardState {
+func (s *Server) currentState(ctx context.Context, sessionID string) (DashboardState, error) {
+	if s.reader != nil {
+		routing, summaries, err := s.reader.DeploymentSnapshot(ctx)
+		if err != nil {
+			return DashboardState{}, err
+		}
+		orders, err := s.reader.OpenOrders(ctx, sessionID)
+		if err != nil {
+			return DashboardState{}, err
+		}
+		state := BuildState(routing, summaries, orders)
+		if s.generator != nil {
+			state.Generator = s.generator.Status(sessionID)
+		}
+		return state, nil
+	}
+
 	state := s.hub.Latest()
 	if s.generator != nil {
-		state.Generator = s.generator.Status()
+		state.Generator = s.generator.Status(sessionID)
 	}
-	return state
+	return state, nil
 }
 
-func (s *Server) renderControls(w http.ResponseWriter) {
+func (s *Server) renderControls(w http.ResponseWriter, r *http.Request, sessionID string) {
+	state, err := s.currentState(r.Context(), sessionID)
+	if err != nil {
+		s.logger.Warn("build controls state failed", "sessionId", sessionID, "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Controls failed: "+err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderer.Region(w, "controls", s.currentState()); err != nil {
+	if err := s.renderer.Region(w, "controls", state); err != nil {
 		s.logger.Warn("render controls failed", "err", err)
 		s.writeError(w, http.StatusInternalServerError, "Render failed: "+err.Error())
 	}
+}
+
+func (s *Server) handleFrontend(w http.ResponseWriter, r *http.Request) {
+	ensureSessionID(w, r)
+	s.frontend.ServeHTTP(w, r)
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
@@ -95,33 +128,53 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	sessionID := ensureSessionID(w, r)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	frames, unsubscribe := s.hub.Subscribe()
-	defer unsubscribe()
-
-	ticker := time.NewTicker(keepAlive)
-	defer ticker.Stop()
+	interval := s.interval
+	if interval <= 0 {
+		interval = time.Second
+	}
+	pollTicker := time.NewTicker(interval)
+	defer pollTicker.Stop()
+	keepAliveTicker := time.NewTicker(keepAlive)
+	defer keepAliveTicker.Stop()
 
 	ctx := r.Context()
+	if !s.writeSessionFrame(ctx, w, sessionID) {
+		return
+	}
+	flusher.Flush()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-keepAliveTicker.C:
 			if _, err := fmt.Fprint(w, ":keepalive\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()
-		case state := <-frames:
-			if !s.writeFrame(w, state) {
+		case <-pollTicker.C:
+			if !s.writeSessionFrame(ctx, w, sessionID) {
 				return
 			}
 			flusher.Flush()
 		}
 	}
+}
+
+func (s *Server) writeSessionFrame(ctx context.Context, w http.ResponseWriter, sessionID string) bool {
+	state, err := s.currentState(ctx, sessionID)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
+		s.logger.Warn("build SSE frame failed", "sessionId", sessionID, "err", err)
+		return true
+	}
+	return s.writeFrame(w, state)
 }
 
 // writeFrame renders every SSE region for state and writes each as a named SSE
@@ -160,8 +213,15 @@ func writeSSEEvent(w http.ResponseWriter, event, body string) error {
 // handleDeployModal renders the Deploy modal fragment from the latest state,
 // pre-selecting the Ramping version (else Current, else first) with the ramp
 // slider set to match its status.
-func (s *Server) handleDeployModal(w http.ResponseWriter, _ *http.Request) {
-	view := buildDeployModalView(s.hub.Latest())
+func (s *Server) handleDeployModal(w http.ResponseWriter, r *http.Request) {
+	sessionID := ensureSessionID(w, r)
+	state, err := s.currentState(r.Context(), sessionID)
+	if err != nil {
+		s.logger.Warn("build deploy modal state failed", "sessionId", sessionID, "err", err)
+		s.writeError(w, http.StatusInternalServerError, "Deploy failed: "+err.Error())
+		return
+	}
+	view := buildDeployModalView(state)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderer.DeployModal(w, view); err != nil {
 		s.logger.Warn("render deploy modal failed", "err", err)
@@ -182,12 +242,19 @@ func (s *Server) handleRollbackModal(w http.ResponseWriter, _ *http.Request) {
 // the slider moved, so we honor the chosen stop; otherwise a radio changed and
 // we derive the ramp from the selected version's deployment-card status.
 func (s *Server) handleDeployRamp(w http.ResponseWriter, r *http.Request) {
+	sessionID := ensureSessionID(w, r)
 	q := r.URL.Query()
 	var view rampView
 	if stop := q.Get("stop"); stop != "" {
 		view = rampViewForStop(stop)
 	} else {
-		view = rampViewFor(s.hub.Latest(), q.Get("version"))
+		state, err := s.currentState(r.Context(), sessionID)
+		if err != nil {
+			s.logger.Warn("build deploy ramp state failed", "sessionId", sessionID, "err", err)
+			s.writeError(w, http.StatusInternalServerError, "Deploy failed: "+err.Error())
+			return
+		}
+		view = rampViewFor(state, q.Get("version"))
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.renderer.DeployRamp(w, view); err != nil {
@@ -253,26 +320,33 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleOrdersPlay(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleOrdersPlay(w http.ResponseWriter, r *http.Request) {
 	if s.generator == nil {
 		s.writeError(w, http.StatusInternalServerError, "Order generator is unavailable")
 		return
 	}
-	s.generator.Play()
-	s.renderControls(w)
+	sessionID := ensureSessionID(w, r)
+	s.generator.Play(sessionID)
+	s.renderControls(w, r, sessionID)
 }
 
-func (s *Server) handleOrdersPause(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleOrdersPause(w http.ResponseWriter, r *http.Request) {
 	if s.generator == nil {
 		s.writeError(w, http.StatusInternalServerError, "Order generator is unavailable")
 		return
 	}
-	s.generator.Pause()
-	s.renderControls(w)
+	sessionID := ensureSessionID(w, r)
+	s.generator.Pause(sessionID)
+	s.renderControls(w, r, sessionID)
 }
 
 func (s *Server) handleRecoverOne(w http.ResponseWriter, r *http.Request) {
+	sessionID := ensureSessionID(w, r)
 	id := r.PathValue("id")
+	if !workflowBelongsToSession(sessionID, id) {
+		s.writeError(w, http.StatusForbidden, "Recover failed: order is not in this session")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), recoverTimeout)
 	defer cancel()
 	if err := s.actions.RecoverOne(ctx, id); err != nil {

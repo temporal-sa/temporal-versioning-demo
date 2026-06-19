@@ -1,9 +1,9 @@
 // Command backend serves the Pizza Tracker SPA and its API.
 //
-// It polls Temporal for the worker-deployment routing state and the live
-// orders, streams updates to the browser over SSE, generates a steady stream of
-// orders, and translates rollout actions (ramp, promote, rollback, recover)
-// into Temporal API calls.
+// It reads Temporal for the worker-deployment routing state and each browser
+// session's live orders, streams updates to the browser over SSE, generates
+// session-scoped orders, and translates rollout actions (ramp, promote,
+// rollback, recover) into Temporal API calls.
 package main
 
 import (
@@ -48,13 +48,19 @@ func main() {
 	}
 	defer c.Close()
 
-	hub := dashboard.NewHub()
+	ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	if err := dashboard.EnsureSessionSearchAttribute(ensureCtx, c, namespace, logger); err != nil {
+		ensureCancel()
+		logger.Error("failed to ensure session search attribute", "err", err)
+		os.Exit(1)
+	}
+	ensureCancel()
+
 	// One shared label resolver so the buildID→label cache is not duplicated
 	// between the reader and the actions.
 	labels := dashboard.NewLabelResolver(c, deploymentName, logger)
 	reader := dashboard.NewSDKReader(c, deploymentName, labels, logger)
-	generatorControl := dashboard.NewGeneratorControl()
-	poller := dashboard.NewPoller(reader, pollInterval, logger, hub.Publish, generatorControl.Status)
+	generatorControl := dashboard.NewSessionGeneratorManager()
 	actions := dashboard.NewActions(c, deploymentName, namespace, labels, logger)
 	// Seed startID from the wall clock so order IDs do not reset to order-1 on
 	// every restart and collide with a still-open order from the previous run.
@@ -62,14 +68,13 @@ func main() {
 	gen := dashboard.NewGenerator(c, taskQueue, orderInterval, int(time.Now().Unix()), generatorControl, logger)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           dashboard.NewServer(hub, actions, renderer, frontend.Assets, generatorControl, logger).Routes(),
+		Handler:           dashboard.NewServer(nil, actions, reader, renderer, frontend.Assets, generatorControl, pollInterval, logger).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go poller.Run(ctx)
 	go gen.Run(ctx)
 	go actions.EnsureCurrentVersion(ctx, pollInterval)
 	go func() {

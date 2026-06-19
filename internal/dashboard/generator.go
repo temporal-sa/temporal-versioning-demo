@@ -2,8 +2,8 @@ package dashboard
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -13,69 +13,82 @@ import (
 
 const generatorMaxRun = 10 * time.Minute
 
-// GeneratorControl owns the play/pause state for starting new orders.
-type GeneratorControl struct {
-	mu       sync.Mutex
-	now      func() time.Time
-	running  bool
-	deadline time.Time
+// SessionGeneratorManager owns play/pause state for active browser sessions.
+// A session only consumes memory while its generator is playing.
+type SessionGeneratorManager struct {
+	mu        sync.Mutex
+	now       func() time.Time
+	deadlines map[string]time.Time
 }
 
-// NewGeneratorControl builds a paused generator control. Each Play call runs for
-// at most ten minutes before Status/Running auto-pauses it.
-func NewGeneratorControl() *GeneratorControl {
-	return newGeneratorControl(time.Now)
+// NewSessionGeneratorManager builds a generator manager with no active sessions.
+// Each Play call runs that session for at most ten minutes.
+func NewSessionGeneratorManager() *SessionGeneratorManager {
+	return newSessionGeneratorManager(time.Now)
 }
 
-func newGeneratorControl(now func() time.Time) *GeneratorControl {
-	return &GeneratorControl{now: now}
+func newSessionGeneratorManager(now func() time.Time) *SessionGeneratorManager {
+	return &SessionGeneratorManager{now: now, deadlines: map[string]time.Time{}}
 }
 
-// Play allows new orders to start for up to generatorMaxRun.
-func (c *GeneratorControl) Play() GeneratorStatus {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.now()
-	c.running = true
-	c.deadline = now.Add(generatorMaxRun)
-	return c.statusLocked(now)
+// Play allows new orders to start for sessionID for up to generatorMaxRun.
+func (m *SessionGeneratorManager) Play(sessionID string) GeneratorStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deadlines[sessionID] = m.now().Add(generatorMaxRun)
+	return GeneratorStatus{Running: true}
 }
 
-// Pause prevents new orders from starting.
-func (c *GeneratorControl) Pause() GeneratorStatus {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.running = false
-	c.deadline = time.Time{}
-	return c.statusLocked(c.now())
+// Pause prevents new orders from starting for sessionID and drops its play state.
+func (m *SessionGeneratorManager) Pause(sessionID string) GeneratorStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.deadlines, sessionID)
+	return GeneratorStatus{}
 }
 
-// Status returns the current generator state, auto-pausing expired play sessions.
-func (c *GeneratorControl) Status() GeneratorStatus {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.statusLocked(c.now())
+// Status returns the current generator state for sessionID, deleting expired
+// sessions so the map only contains actively playing sessions.
+func (m *SessionGeneratorManager) Status(sessionID string) GeneratorStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.statusLocked(sessionID, m.now())
 }
 
-// Running reports whether new orders may start right now.
-func (c *GeneratorControl) Running() bool {
-	return c.Status().Running
-}
-
-func (c *GeneratorControl) statusLocked(now time.Time) GeneratorStatus {
-	if c.running && !c.deadline.IsZero() && !now.Before(c.deadline) {
-		c.running = false
-		c.deadline = time.Time{}
+// ActiveSessions returns every session that may start an order right now. Expired
+// sessions are removed as part of the scan.
+func (m *SessionGeneratorManager) ActiveSessions() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	sessions := make([]string, 0, len(m.deadlines))
+	for sessionID := range m.deadlines {
+		if m.statusLocked(sessionID, now).Running {
+			sessions = append(sessions, sessionID)
+		}
 	}
-	return GeneratorStatus{Running: c.running}
+	slices.Sort(sessions)
+	return sessions
 }
 
-// Generator starts pizza orders while its control is playing.
+func (m *SessionGeneratorManager) statusLocked(sessionID string, now time.Time) GeneratorStatus {
+	deadline, ok := m.deadlines[sessionID]
+	if !ok {
+		return GeneratorStatus{}
+	}
+	if !now.Before(deadline) {
+		delete(m.deadlines, sessionID)
+		return GeneratorStatus{}
+	}
+	return GeneratorStatus{Running: true}
+}
+
+// Generator starts pizza orders for each session whose control is playing.
 type Generator struct {
 	c         client.Client
 	taskQueue string
 	interval  time.Duration
-	control   *GeneratorControl
+	control   *SessionGeneratorManager
 	logger    *slog.Logger
 	startID   int
 }
@@ -83,7 +96,7 @@ type Generator struct {
 // NewGenerator builds a Generator that starts one order per interval, numbering
 // orders from startID+1.
 func NewGenerator(c client.Client, taskQueue string, interval time.Duration, startID int,
-	control *GeneratorControl, logger *slog.Logger,
+	control *SessionGeneratorManager, logger *slog.Logger,
 ) *Generator {
 	return &Generator{
 		c:         c,
@@ -95,10 +108,10 @@ func NewGenerator(c client.Client, taskQueue string, interval time.Duration, sta
 	}
 }
 
-// Run starts one order per interval while the control is playing, until ctx is
-// cancelled. Orders are started WITHOUT an explicit version so Temporal routes
-// them by the deployment's Current/Ramping config; Pinned behaviour then locks
-// each to its start version.
+// Run starts one order per active session every interval, until ctx is cancelled.
+// Orders are started WITHOUT an explicit version so Temporal routes them by the
+// deployment's Current/Ramping config; Pinned behaviour then locks each to its
+// start version.
 func (g *Generator) Run(ctx context.Context) {
 	id := g.startID
 	t := time.NewTicker(g.interval)
@@ -108,17 +121,22 @@ func (g *Generator) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if g.control != nil && !g.control.Running() {
+			if g.control == nil {
 				continue
 			}
-			id++
-			in := pizza.OrderInput{OrderID: id, Pizza: pizza.Menu[id%len(pizza.Menu)]}
-			opts := client.StartWorkflowOptions{
-				ID:        fmt.Sprintf("order-%d", id),
-				TaskQueue: g.taskQueue,
-			}
-			if _, err := g.c.ExecuteWorkflow(ctx, opts, pizza.WorkflowTypeName, in); err != nil {
-				g.logger.Warn("failed to start order", "orderId", id, "err", err)
+			for _, sessionID := range g.control.ActiveSessions() {
+				id++
+				in := pizza.OrderInput{OrderID: id, Pizza: pizza.Menu[id%len(pizza.Menu)]}
+				opts := client.StartWorkflowOptions{
+					ID:        workflowIDForOrder(sessionID, id),
+					TaskQueue: g.taskQueue,
+					SearchAttributes: map[string]interface{}{
+						SessionSearchAttribute: sessionID,
+					},
+				}
+				if _, err := g.c.ExecuteWorkflow(ctx, opts, pizza.WorkflowTypeName, in); err != nil {
+					g.logger.Warn("failed to start order", "sessionId", sessionID, "orderId", id, "err", err)
+				}
 			}
 		}
 	}

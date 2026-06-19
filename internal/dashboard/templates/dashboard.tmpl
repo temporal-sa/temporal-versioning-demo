@@ -12,7 +12,7 @@
     {{- if .Failing}}<button class="recover-btn" type="button" title="Recover {{.ID}}" aria-label="Recover {{.ID}}"
             hx-post="/orders/{{.ID}}/recover" hx-target="#toast" hx-swap="innerHTML" hx-target-error="#toast"
             hx-disabled-elt="this">Fix</button>{{end -}}
-    <b>#{{.ID}}</b>
+    <b>#{{orderLabel .ID}}</b>
     {{- if .Pizza}}<span class="nm">{{.Pizza}}</span>{{end -}}
     <span class="el">{{elapsed .ElapsedSec}}</span>
   </div>
