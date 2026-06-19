@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"strconv"
+	"strings"
 )
 
 //go:embed templates/*.tmpl
@@ -204,7 +205,23 @@ func funcMap() template.FuncMap {
 		"barWidth":            func(pct int) int { return max(0, min(100, pct)) },
 		"hasRamping":          hasRamping,
 		"hasMultipleVersions": hasMultipleVersions,
+		"orderLabel":          orderLabel,
 	}
+}
+
+func orderLabel(id string) string {
+	rest, ok := strings.CutPrefix(id, "order-")
+	if !ok {
+		return id
+	}
+	idx := strings.LastIndex(rest, "-")
+	if idx <= 0 || idx == len(rest)-1 {
+		return id
+	}
+	if !validSessionID(rest[:idx]) {
+		return id
+	}
+	return rest[idx+1:]
 }
 
 // hasRamping reports whether any version card is currently ramping. The controls
