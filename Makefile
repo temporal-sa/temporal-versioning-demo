@@ -133,6 +133,10 @@ check: lint test ## Run all checks (lint + test)
 
 ##@ Build
 
+.PHONY: css
+css: ## Compile Tailwind CSS (frontend/input.css -> frontend/app.css)
+	npx --yes @tailwindcss/cli@4.3.1 -i frontend/input.css -o frontend/app.css --minify
+
 .PHONY: build
 build: ## Build the worker and backend binaries into ./bin
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(WORKER_BIN) ./cmd/worker

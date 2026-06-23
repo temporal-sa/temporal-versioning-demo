@@ -1,6 +1,6 @@
 ---
 name: "Frontend conventions and gotchas"
-description: "Non-derivable frontend directives and traps: no build / Tailwind Play CDN, zero JS (HTMX only), hypermedia URLs (never /api/), the @media-can't-@apply trap, morph-not-replace, 200-not-204, no per-version failure count"
+description: "Non-derivable frontend directives and traps: Tailwind compiled ahead of time (build step -> app.css), zero JS (HTMX only), hypermedia URLs (never /api/), the @media-can't-@apply trap, morph-not-replace, 200-not-204, no per-version failure count"
 type: feedback
 ---
 
@@ -11,10 +11,20 @@ in `frontend/index.html` and the Go templates and is self-describing.
 
 **Directives (intent, not visible from the code):**
 
-- **No build step.** Tailwind comes via the Play CDN (`@tailwindcss/browser@4`),
-  which only processes `<style type="text/tailwindcss">`, so all styling lives in
-  the single `<style>` block in `index.html`. Do **not** add a Node/PostCSS build
-  or an external `.css`; if one is truly needed, surface the trade-off first.
+- **Tailwind is compiled ahead of time (build step).** The styling source is
+  `frontend/input.css` (`@import "tailwindcss"` + `@theme` tokens + the `@apply`
+  component classes + the raw `@media` blocks); it compiles to `frontend/app.css`,
+  served as a static `<link rel="stylesheet" href="/app.css">` and embedded via
+  `embed.go`. The `css` stage in `Dockerfile.backend` (`node:22-slim`,
+  `npm install --no-save tailwindcss@4.3.1 @tailwindcss/cli@4.3.1`, run the local
+  `tailwindcss` binary) rebuilds `app.css` from source on every image build, so
+  production never trusts a stale file; `make css` regenerates it locally and the
+  committed `app.css` lets `go build`/`go:embed` work without Node. The Play CDN
+  (`@tailwindcss/browser`) was dropped: it is dev-only and compiles in the browser
+  at runtime, which left the page unstyled on cache/navigation load paths (FOUC)
+  until a force-refresh. Note `@tailwindcss/cli` alone does **not** resolve
+  `@import "tailwindcss"` — the `tailwindcss` engine package must also be installed
+  on the resolution path.
 - **Zero application JavaScript — all interactivity is HTMX.** SSE pushes
   server-rendered HTML (not JSON). No `<script>` block, no
   `onclick`/`oninput`/`hx-on` (only the head's CDN `<script src>` includes). Wire
@@ -35,7 +45,8 @@ in `frontend/index.html` and the Go templates and is self-describing.
 
 **Traps (each cost real debugging time):**
 
-- **`@media`-based variants do NOT compile via `@apply` in the Play CDN.**
+- **`@media`-based variants do NOT compile via `@apply`** (a Tailwind `@apply`
+  limitation, not Play-CDN-specific — it still holds under the CLI build).
   `@apply max-[760px]:…` and `prefers-reduced-motion:…` emit *nothing* — keep
   responsive and reduced-motion rules as raw `@media` blocks. Non-media
   selectors (`:hover`, `:has`, `:not`), arbitrary-property utilities and

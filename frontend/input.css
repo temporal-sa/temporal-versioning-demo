@@ -1,0 +1,578 @@
+/*
+  Single styling source for the app. Everything is expressed with Tailwind
+  utilities (via @apply on semantic component classes; the Go templates stay
+  dumb and reuse those class names). The theme is Temporal's brand: Space
+  Black surfaces, UV (#444CE7) accent, Off White text, Hanken Grotesk type.
+  Only what cannot be a utility stays raw CSS: @theme token definitions,
+  @keyframes, the prefers-reduced-motion query, and the stepper/cur-node
+  pseudo-elements (the progress fill is a calc() driven by live --fill).
+*/
+
+@import "tailwindcss";
+
+/* Scan the markup that carries class names so any utilities are emitted.
+   (Components below use @apply and compile regardless of detection.) */
+@source "./index.html";
+@source "../internal/dashboard/templates";
+
+@theme {
+  /* ===== Temporal brand palette =====
+     UV / Space Black / Off White from temporal.io/brand, plus a neutral
+     dark surface scale. Exposed as color tokens so utilities (bg-*,
+     text-*, border-*) and var(--color-*) references both resolve. */
+  --color-base: #0e0e11; /* page background */
+  --color-surface: #15151a; /* cards, header, dots */
+  --color-raised: #1b1b21; /* radios, default buttons */
+  --color-edge: #20202a; /* card borders */
+  --color-line: #2c2c36; /* default borders, tracks */
+  --color-divider: #23232c; /* header + column divider */
+  --color-ink: #f8fafc; /* Off White text */
+
+  --color-uv: #444ce7; /* Temporal UV — primary accent, v1 */
+  --color-uv-deep: #3a40c4; /* UV pressed/hover */
+  --color-green: #16a34a; /* v2 + stepper success fill */
+  --color-amber: #d97706; /* v3 + ramping */
+  --color-red: #dc2626; /* error */
+
+  /* Brand type: Hanken Grotesk (close to Aeonik), system fallbacks. */
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Animations (each maps to an animate-* utility). */
+  --animate-pulse-dot: pulse 1.5s ease-out infinite;
+  --animate-errp: errp 1.2s infinite;
+  --animate-card-in: card-in 0.35s ease backwards;
+  --animate-card-collapse: card-collapse 0.5s ease 4s forwards;
+  --animate-toast-out: toast-out 4s ease forwards;
+  --animate-chip-pulse: chip-pulse 0.45s ease;
+
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(250, 204, 21, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+    }
+  }
+
+  @keyframes errp {
+    0% {
+      box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+    }
+  }
+
+  @keyframes toast-out {
+    0%,
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes chip-pulse {
+    0% {
+      transform: scale(1.18);
+      filter: brightness(1.5);
+    }
+    100% {
+      transform: scale(1);
+      filter: brightness(1);
+    }
+  }
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes card-collapse {
+    to {
+      max-height: 0;
+      margin-bottom: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      border-width: 0;
+      opacity: 0;
+      filter: grayscale(1);
+    }
+  }
+}
+
+* {
+  @apply box-border;
+}
+
+html,
+body {
+  @apply m-0 h-full;
+}
+
+body {
+  @apply bg-base text-ink font-sans antialiased;
+}
+
+/* ===== App shell =====
+   Full-bleed shell/header; the body is wrapped in a centered max-w-5xl
+   column (.dbody). Inner sections supply their own px. */
+.app {
+  @apply flex h-dvh flex-col overflow-hidden;
+}
+
+.top {
+  @apply flex shrink-0 items-center gap-3 border-b border-divider bg-surface px-[18px] py-[15px];
+}
+
+/* Title links to the home page; reset the anchor's default underline and
+   color so it looks identical to the previous plain heading. */
+.top .logo {
+  @apply flex items-center gap-2 text-[17px] font-extrabold text-inherit no-underline;
+}
+
+.top .logo .logo-icon {
+  @apply shrink-0;
+}
+
+/* Right-aligned "powered by" caption + Temporal logo lockup. */
+.top .attribution {
+  @apply ml-auto flex items-center gap-2 text-[12px] uppercase tracking-wide text-white/55;
+}
+
+/* The logo links to temporal.io; inline-flex keeps the block img
+   vertically centered exactly as before (no inline line-height gap). */
+.top .attribution a {
+  @apply inline-flex items-center;
+}
+
+.top .attribution img {
+  @apply block h-8 w-auto;
+}
+
+/* Read-only ramp percentage shown live in the Deploy modal (amber accent). */
+.pct {
+  @apply font-extrabold text-amber;
+}
+
+/* ===== Body: two flex columns =====
+   Centered max-w-5xl row: a flexible orders column (.dleft) and a fixed
+   360px deployment column (.dright). Each paints its own base background;
+   the divider is .dright's border-left. Stacks on mobile. */
+.dbody {
+  @apply mx-auto flex min-h-0 w-full max-w-5xl flex-1;
+}
+
+.dleft {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-base px-[18px] py-4
+    [scrollbar-gutter:stable];
+}
+
+.dright {
+  @apply min-h-0 w-[360px] min-w-0 shrink-0 overflow-y-auto border-l border-divider bg-base px-[18px] py-4
+    [scrollbar-gutter:stable];
+}
+
+.sect {
+  @apply mb-[13px] flex text-[10.5px] uppercase tracking-[0.6px] opacity-55;
+}
+
+.sect .count {
+  @apply ml-auto font-semibold opacity-80;
+}
+
+/* ===== Live orders list ===== */
+.olist {
+  @apply shrink-0;
+}
+
+/* Mobile (<=760px): the whole app scrolls and the columns stack with the
+   deployment panel on top. @apply cannot emit media queries in the Play
+   CDN, so these responsive overrides stay as raw CSS. */
+@media (max-width: 760px) {
+  .app {
+    overflow-y: auto;
+  }
+
+  .dbody {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .dleft {
+    overflow: visible;
+  }
+
+  .dright {
+    width: auto;
+    order: -1;
+    overflow: visible;
+    border-left: 0;
+    scrollbar-gutter: auto;
+  }
+
+  /* Pizza name hidden on small screens to keep the header compact. */
+  .oh .nm {
+    display: none;
+  }
+
+  /* Attribution text hidden on small screens; the Temporal logo stays. */
+  .top .attribution span {
+    display: none;
+  }
+}
+
+/* ===== Version badges + status chips ===== */
+.vb {
+  @apply rounded-[9px] px-2 py-0.5 text-[11px] font-bold text-white;
+}
+
+.b-v1 {
+  @apply bg-uv;
+}
+
+.b-v2 {
+  @apply bg-green;
+}
+
+.b-v3 {
+  @apply bg-amber;
+}
+
+.chip {
+  @apply rounded-md px-[7px] py-0.5 text-[9.5px] font-bold animate-chip-pulse;
+}
+
+.c-cur {
+  @apply bg-[#1e2150] text-[#c7ccff];
+}
+
+.c-ramp {
+  @apply bg-[#5a3a12] text-[#fde68a];
+}
+
+.c-drain {
+  @apply bg-[#3f3f46] text-[#d4d4d8];
+}
+
+.c-inact {
+  @apply bg-[#27272e] text-[#9ca3af];
+}
+
+/* ===== Order card + stepper ===== */
+.order {
+  @apply mb-3 max-h-[600px] animate-card-in rounded-xl border-2 border-edge bg-surface p-[13px_14px]
+    transition-[border-color,background-color] duration-[180ms];
+}
+
+.order.fail {
+  @apply border-[#5b1d1d] bg-[#1a1416];
+}
+
+/* Hover changes only the border colour — no lift/displacement, no ring,
+   no shadow. Applies to every order, Done included. */
+.order:hover {
+  @apply border-[#9a9a9a];
+}
+
+/* Keep the red identity on hover for a failed card. */
+.order.fail:hover {
+  @apply border-red;
+}
+
+/* Done → visible-then-collapse with no JS: full for 4s, then card-collapse
+   shrinks height + bottom margin to 0 so cards below glide up. */
+.order.done {
+  @apply animate-card-collapse overflow-hidden;
+}
+
+.oh {
+  @apply mb-4 flex flex-wrap items-center gap-2 text-[12.5px];
+}
+
+.oh .nm {
+  @apply font-normal opacity-70;
+}
+
+.oh .el {
+  @apply ml-auto text-[10.5px] opacity-45;
+}
+
+/* Per-card recover action: a small raised text button (matching the toolbar
+   .btn look — raised surface + border) with amber text, shown on a failing
+   order just right of the version badge. The surface and border use a lighter
+   grey than .btn so the box stays visible on the dark failing card.
+   Disables itself while its request runs. */
+.recover-btn {
+  @apply inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md
+    border border-[#3a3a44] bg-[#2c2c36] px-2 py-0.5 text-[11px] font-semibold leading-none
+    text-amber transition-colors;
+}
+
+.recover-btn:hover:not(:disabled) {
+  @apply border-[#52525c] bg-[#3a3a44];
+}
+
+.recover-btn:disabled {
+  @apply cursor-progress opacity-60;
+}
+
+/* Reserve vertical room (pb) for the absolutely-positioned labels. */
+.stepper {
+  @apply relative flex justify-between pb-[17px];
+}
+
+/* Connector track + progress fill — pseudo-elements; the fill width is a
+   calc() driven by the live --fill custom property, so these stay raw CSS. */
+.stepper::before,
+.stepper::after {
+  content: "";
+  position: absolute;
+  top: 8.5px;
+  left: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.stepper::before {
+  right: 10px;
+  background: var(--color-line);
+}
+
+.stepper::after {
+  width: calc((100% - 20px) * var(--fill, 0) / 100);
+  background: var(--color-green);
+  transition: width 0.6s ease;
+}
+
+.node {
+  @apply relative z-[1] flex flex-none flex-col items-center;
+}
+
+.dot {
+  @apply flex size-5 items-center justify-center rounded-full border-2 border-line bg-surface text-[10px]
+    text-[#6b7280] transition-colors duration-[400ms];
+}
+
+.lbl {
+  @apply absolute left-1/2 top-full mt-[7px] w-max max-w-[84px] -translate-x-1/2 text-center text-[9px]
+    leading-[1.1] opacity-55 transition-[opacity,color] duration-[400ms];
+}
+
+/* Anchor the end labels inward so they never overflow the card edge. */
+.node:first-child .lbl {
+  @apply left-0 translate-x-0 text-left;
+}
+
+.node:last-child .lbl {
+  @apply left-auto right-0 translate-x-0 text-right;
+}
+
+.node.done .dot {
+  @apply border-green bg-green text-white;
+}
+
+.node.cur .dot {
+  @apply animate-pulse-dot border-[#facc15] bg-[#facc15] text-[#111];
+}
+
+/* Inner dot of the current node — pseudo-element, kept as raw CSS. */
+.node.cur .dot::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #111;
+}
+
+.node.cur .lbl {
+  @apply font-bold text-[#facc15] opacity-100;
+}
+
+.node.err .dot {
+  @apply animate-errp border-red bg-red text-white;
+}
+
+.node.err .lbl {
+  @apply font-bold text-[#fca5a5] opacity-100;
+}
+
+/* Reduced motion: disable smoothing/entry; Done still collapses (snaps). */
+@media (prefers-reduced-motion: reduce) {
+  .order {
+    animation: none;
+    transition: none;
+  }
+
+  .order.done {
+    animation: card-collapse 0.01s linear 4s forwards;
+  }
+
+  .stepper::after,
+  .dot,
+  .lbl {
+    transition: none;
+  }
+
+  .ver,
+  .bar > span,
+  .chip {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ===== Deployment panel ===== */
+.ver {
+  @apply mb-[11px] rounded-[11px] border border-edge bg-surface p-3;
+  transition: opacity 0.3s ease;
+}
+
+.ver.inactive {
+  @apply opacity-55;
+}
+
+.vrow {
+  @apply mb-[9px] flex flex-wrap items-center gap-[7px] text-[12px];
+}
+
+.vrow .chip {
+  @apply ml-auto;
+}
+
+.bar {
+  @apply h-[7px] overflow-hidden rounded-sm bg-line;
+}
+
+.bar > span {
+  @apply block h-full w-[var(--bar-w,0)];
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pin {
+  @apply mt-2 text-[10.5px] opacity-60;
+}
+
+/* ===== Buttons ===== */
+.controls {
+  @apply mt-4 flex gap-2;
+}
+
+.controls .btn {
+  @apply mt-0 flex-1;
+}
+
+.btn {
+  @apply mt-[9px] cursor-pointer rounded-[9px] border border-line bg-raised p-[9px] text-center
+    text-[11.5px] font-sans font-semibold text-ink;
+}
+
+.btn:hover:not(:disabled) {
+  @apply bg-[#26262e];
+}
+
+.btn:disabled {
+  @apply cursor-not-allowed opacity-45;
+}
+
+.btn.danger {
+  @apply border-[#7f1d1d] bg-[#7f1d1d] text-white;
+}
+
+.btn.danger:hover:not(:disabled) {
+  @apply bg-[#991b1b];
+}
+
+.btn.primary {
+  @apply border-uv bg-uv text-white;
+}
+
+.btn.primary:hover:not(:disabled) {
+  @apply bg-uv-deep;
+}
+
+.btn.play {
+  @apply border-green bg-green text-white;
+}
+
+.btn.play:hover:not(:disabled) {
+  @apply bg-[#15803d];
+}
+
+/* ===== Toast ===== */
+.toast {
+  @apply pointer-events-none fixed bottom-[18px] left-1/2 z-10 -translate-x-1/2 rounded-[9px]
+    border border-[#7f1d1d] bg-[#3f1212] px-4 py-2.5 text-[12px] font-semibold text-[#fca5a5] opacity-0;
+}
+
+/* Swapped in as <div class="toast show">…</div>; fades out after ~4s, no JS. */
+.toast.show {
+  @apply animate-toast-out opacity-100;
+}
+
+/* ===== Deploy modal ===== */
+.modal-scrim {
+  @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60;
+}
+
+.modal {
+  @apply w-[360px] rounded-2xl border border-line bg-surface p-7;
+}
+
+.modal h3 {
+  @apply m-0 mb-2 text-lg font-extrabold;
+}
+
+.modal-note {
+  @apply mt-5 text-xs leading-relaxed text-[#9aa];
+}
+
+.modal-lbl {
+  @apply mt-5 mb-2 flex justify-between text-xs uppercase tracking-wider text-[#8a8a99];
+}
+
+.radios {
+  @apply flex gap-2.5;
+}
+
+.radio {
+  @apply flex-1 cursor-pointer rounded-lg border border-line bg-raised py-2.5 text-center transition-colors;
+}
+
+.radio:has(input:checked) {
+  @apply border-uv bg-[#1d2046];
+}
+
+.radio:not(:has(input:checked)):hover {
+  @apply border-[#3f3f4d] bg-[#22222c];
+}
+
+.radio input {
+  @apply hidden;
+}
+
+/* Modal range input: 3 reachable stops (25/50/100) via min=0 max=2. */
+.stepper-range {
+  @apply block w-full accent-amber;
+}
+
+.modal-acts {
+  @apply mt-5 flex gap-2.5;
+}
+
+.modal-acts .btn {
+  @apply flex-1;
+}

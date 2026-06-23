@@ -1,14 +1,23 @@
 # syntax=docker/dockerfile:1
 
+# --- css stage: compile Tailwind ahead of time (the Play CDN is dev-only) ---
+FROM node:22-slim AS css
+WORKDIR /src
+COPY frontend ./frontend
+COPY internal ./internal
+RUN npm install --no-save tailwindcss@4.3.1 @tailwindcss/cli@4.3.1 \
+        && ./node_modules/.bin/tailwindcss \
+            -i ./frontend/input.css -o ./frontend/app.css --minify
+
 # --- build stage ---
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-
 COPY go.mod go.sum* ./
 RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
     go mod download
-
 COPY . .
+# Overlay the freshly compiled stylesheet so go:embed bakes the real CSS.
+COPY --from=css /src/frontend/app.css ./frontend/app.css
 RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
     --mount=type=cache,id=gobuild,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
